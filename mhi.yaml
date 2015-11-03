@@ -1,0 +1,48 @@
+---
+name: MHI_Biobank
+samples: "data/samples/list.txt"
+codes:
+    - name: Frequency
+      code: [[1, Daily], [2, Weekly], [3, Monthly], [4, Occasionally]]
+
+data:
+    - filename: "data/variables/Arrythmia.txt"
+      engine: "read_csv"
+      sep: ";"
+      header: 0
+      index: ProjectId
+
+      # name, icd10, parent, variable_type, crf_page, code_name
+      # Maps are used to recode discrete variables.
+      # Codes should be used for factors.
+      variables:
+        - column: Palp
+          name: Palpitations
+          icd10: R00.2
+          map: &yesNoNa [[1, 1], [2, 0], [9, "nan"]]
+          type: discrete
+          crf_page: 16
+          question: "History of Palpitations"
+
+        - column: PalpFreq
+          name: "Palpitations frequency"
+          parent: Palpitations  # Check name when creating.
+          code: Frequency
+          type: factor
+          crf_page: 16
+          question: "Palpitations: Frequency"
+
+        - column: Faint
+          name: Fainting 
+          icd10: R55
+          map: *yesNoNa
+          type: discrete
+          crf_page: 16
+          question: "History of Fainting"
+
+        - column: FaintAge
+          name: FaintingAge
+          type: continuous
+          map: [[-9, "nan"], [0, "nan"]]
+          crf_page: 16
+          question: "Age at first episode (lifetime)"
