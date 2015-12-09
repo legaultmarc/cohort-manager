@@ -37,7 +37,9 @@ def parse_yaml(filename):
         raise InvalidConfig("No cohort name ('name') was provided.")
 
     # FIXME. In production, be more careful.
-    shutil.rmtree(name)
+    if os.path.isdir(name):
+        logger.warning("Deleting directory '{}'.".format(name))
+        shutil.rmtree(name)
 
     manager = CohortManager(name)
 

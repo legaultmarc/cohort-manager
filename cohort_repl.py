@@ -102,7 +102,6 @@ class command(object):
     def __init__(self, *args, **kwargs):
         if args:
             # This function takes no arguments.
-            global REGISTERED_COMMANDS
             f = args[0]
             f.args_types = None
             REGISTERED_COMMANDS[f.func_name] = f
@@ -111,7 +110,6 @@ class command(object):
         self.optional = kwargs.get("optional", 0)
 
     def __call__(self, f):
-        global REGISTERED_COMMANDS
         REGISTERED_COMMANDS[f.func_name] = f
         f.args_types = self.args_types
         f.optional = self.optional
@@ -139,11 +137,11 @@ def main():
         except EOFError:
             print()
             break
-        except Exception as e:
-            message = "\nUnknown error occured.\n"
-            if COLOR:
-                message = colored(message, "red")
-            print("{}\n{}".format(message, e))
+        # except Exception as e:
+        #     message = "\nUnknown error occured.\n"
+        #     if COLOR:
+        #         message = colored(message, "red")
+        #     print("{}\n{}".format(message, e))
 
 
 def _get_manager():
@@ -157,6 +155,10 @@ def _get_manager():
 @command
 def exit():
     """Quit the REPL."""
+    try:
+        STATE["manager"].close()
+    except Exception:
+        pass
     quit()
 
 
@@ -183,9 +185,8 @@ def help(command=None):
 @command(args_types=(str, ))
 def build(yaml_filename):
     """Build and load a cohort using a YAML descriptor."""
-    # TODO check if global is necessary for dicts.
-    global STATE
     STATE["manager"] = parse_yaml(yaml_filename)
+    STATE["manager"].validate()
 
 
 @command(args_types=(str, ))
@@ -205,17 +206,14 @@ def sql(sql):
 def list():
     """List available phenotypes."""
     manager = _get_manager()
-    print("Available phenotypes from the database:")
-    for elem in manager.get_phenotypes_list():
-        if COLOR:
-            elem = colored(elem, "green")
-        print("\t{}".format(elem))
+    manager.tree.pretty_print()
 
 
 def _get_data_meta(phenotype):
     manager = _get_manager()
-    data = manager.get_data(phenotype)
-    if not data:
+    try:
+        data = manager.get_data(phenotype)
+    except KeyError:
         raise REPLException("Could not find data for '{}'.".format(phenotype))
     data = np.array(data)
 
@@ -232,6 +230,7 @@ def _get_data_meta(phenotype):
 def info(phenotype):
     """Get information and summary statistics on the phenotype."""
     data, meta = _get_data_meta(phenotype)
+    
     print("Phenotype meta data:")
     for k, v in meta.items():
         if COLOR:
@@ -306,8 +305,14 @@ def load(path):
     if base:
         os.chdir(base)
 
-    global STATE
     STATE["manager"] = CohortManager(name)
+    STATE["manager"].rebuild_tree()
+
+
+@command
+def validate():
+    """Run data balidation routine."""
+    STATE["manager"].validate(mode="warn")
 
 
 if __name__ == "__main__":

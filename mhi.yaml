@@ -1,12 +1,15 @@
 ---
 name: MHI_Biobank
-samples: "data/samples/list.txt"
+samples: "/Users/legaultmarc/data/mhi_biobank/samples/list.txt"
 codes:
-    - name: Frequency
+    - name: &codeFreq Frequency
       code: [[1, Daily], [2, Weekly], [3, Monthly], [4, Occasionally]]
 
+    - name: &codeAFib AtrialFibrillationType
+      code: [[1, Paroxysmal], [2, Persistent], [3, Permanent], [4, Unknown]]
+
 data:
-    - filename: "data/variables/Arrythmia.txt"
+    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/Arrythmia.txt"
       engine: "read_csv"
       sep: ";"
       header: 0
@@ -17,7 +20,7 @@ data:
       # Codes should be used for factors.
       variables:
         - column: Palp
-          name: Palpitations
+          name: &palpitations Palpitations
           icd10: R00.2
           map: &yesNoNa [[1, 1], [2, 0], [9, "nan"]]
           type: discrete
@@ -26,8 +29,8 @@ data:
 
         - column: PalpFreq
           name: "Palpitations frequency"
-          parent: Palpitations  # Check name when creating.
-          code: Frequency
+          parent: *palpitations
+          code: *codeFreq
           type: factor
           crf_page: 16
           question: "Palpitations: Frequency"
@@ -43,6 +46,148 @@ data:
         - column: FaintAge
           name: FaintingAge
           type: continuous
-          map: [[-9, "nan"], [0, "nan"]]
+          map: &defaultContinuous [[-9, "nan"], [0, "nan"]]
           crf_page: 16
           question: "Age at first episode (lifetime)"
+
+        - column: Arrest
+          name: HistoryOfCardiacArrest
+          icd10: I46
+          map: *yesNoNa
+          type: discrete
+          crf_page: 16
+          question: "History of cardiac arrest"
+
+        - column: Arrh
+          name: &arrh HistoryOfArrhythmia
+          map: *yesNoNa
+          type: discrete
+          crf_page: 17
+          question: "History of arrhythmia"
+
+        - column: ArrhAge
+          name: AgeAtFirstArrhythmia
+          parent: *arrh
+          type: continuous
+          map: *defaultContinuous
+          crf_page: 17
+          question: "Arrhythmia: Age at first episode (years old)"
+
+        - column: ArrhYear
+          name: YearOfLastArrhymia
+          parent: *arrh
+          type: continuous
+          map: *defaultContinuous
+          crf_page: 17
+          question: "Arrhythmia: Year of most recent episode"
+
+        - column: Afib
+          name: &afib AtrialFibrillation
+          parent: *arrh
+          type: discrete
+          map: *yesNoNa
+          icd10: I48
+          crf_page: 17
+          question: "History of Atrial Fibrillation (AFib)"
+
+        - column: AfibType
+          name: AtrialFibrillationType
+          parent: *afib
+          type: factor
+          code: codeAFib
+          crf_page: 17
+          question: "AFib: Select type"
+
+        - column: AfibYear
+          name: YearOfLastAtrialFibrillation
+          parent: *afib
+          type: continuous
+          map: *defaultContinuous
+          crf_page: 17
+          question: "AFib: Year of last documented episode"
+
+        - column: Supra
+          name: &svt SupraventricularTachycardia
+          parent: *arrh
+          icd10: I47.1
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of Supraventricular Tachycardia (SVT)"
+
+        - column: SupraAV
+          name: AtrioventricularNodalReentrantTachycardia
+          parent: *svt
+          type: discrete
+          crf_page: 17
+          question: "SVT: Multiple choice - AVNRT (AV Nodal Reentry Tachycardia)"
+
+        - column: SupraAP
+          name: WolffParkinsonWhite
+          parent: *svt
+          map: [[2, 1]]
+          type: discrete
+          crf_page: 17
+          question: "SVT: Multiple choice - Accessory Pathway (Wolff-Parkinson-White)"
+
+        - column: SupraAT
+          name: AtrialTachycardia
+          parent: *svt
+          map: [[3, 1]]
+          type: discrete
+          crf_page: 17
+          question: "SVT: Multiple choice - Atrial Tachycardia"
+
+        - column: SupraOther
+          name: OtherSupraventricularTachycardia
+          parent: *svt
+          map: [[4, 1]]
+          type: discrete
+          crf_page: 17
+          question: "SVT: Multiple choice - Other mechanism"
+
+        - column: Flutter
+          name: AtrialFlutter
+          parent: *arrh
+          icd10: I48
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of Atrial Flutter"
+
+        - column: Ventr
+          name: VencticularTachycardia
+          parent: *arrh
+          icd10: I47.2
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of Ventricular Tachycardia/Fibrillation"
+
+        - column: SSinus
+          name: SickSinusSyndrome
+          parent: *arrh
+          icd10: I49.5
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of Sick Sinus Syndrome"
+
+        - column: AVBlock
+          name: AtrioventricularBlock
+          parent: *arrh
+          icd10: I44
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of AV Block"
+
+        - column: ArrhOther
+          name: OtherArrhythmia
+          parent: *arrh
+          type: discrete
+          map: *yesNoNa
+          crf_page: 17
+          question: "History of Other Arrhythmia"
+
+# PAGE 18 demain...
