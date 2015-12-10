@@ -11,6 +11,7 @@ import os
 import six
 import h5py
 import numpy as np
+import pandas as pd
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import stats
@@ -430,12 +431,54 @@ class CohortManager(object):
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
         return self.cur.fetchall()
 
-    def get_data(self, phenotype):
-        """Get a phenotype vector."""
+    def get_data(self, phenotype, numpy=False):
+        """Get a phenotype vector.
+
+        By default, this will be the HDF5 dataset because it's the most
+        efficient representation.
+
+        If you need the numpy functionalities, use `numpy=True`.
+
+        """
         try:
-            return self.data["data/" + str(phenotype)]
+            data = self.data["data/" + str(phenotype)]
         except KeyError:
             raise KeyError("No data for '{}'.".format(phenotype))
+
+        if not numpy:
+            return data
+
+        data = np.array(data)
+        # Get metadata.
+        meta = self.get_phenotype(phenotype)
+        if meta["variable_type"] in ("continuous", "discrete"):
+            return data
+
+        return self._represent_factor_data(data, meta)
+
+    def _represent_factor_data(self, data, meta):
+        # Get the code.
+        code = self.get_code(meta["code_name"])
+        # Check to see if the code is eligible to directly create a pandas
+        # categorical variable.
+        keys = [i[0] for i in code]
+        if set(keys) == set(range(len(keys))):
+            # Code is valid (maps to integers 0, 1, ..., n)
+            # Recode missings for pandas convention.
+            assert -1 not in keys
+            data[np.isnan(data)] = -1
+            return pd.Categorical.from_codes(
+                data,
+                [i[1] for i in sorted(code, key=lambda x: x[0])]
+            )
+
+        # If not, we fallback to the default constructor.
+        # This is less efficient...
+        code = dict(code)
+        return pd.Series(
+            [code[i] if not np.isnan(i) else np.nan for i in data],
+            dtype="category"
+        )
 
     def get_code_names(self):
         """Get a set of code names."""

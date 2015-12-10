@@ -219,10 +219,9 @@ def list():
 def _get_data_meta(phenotype):
     manager = _get_manager()
     try:
-        data = manager.get_data(phenotype)
+        data = manager.get_data(phenotype, numpy=True)
     except KeyError:
         raise REPLException("Could not find data for '{}'.".format(phenotype))
-    data = np.array(data)
 
     meta = manager.get_phenotype(phenotype)
     if not meta:
@@ -246,7 +245,11 @@ def info(phenotype):
 
     print("\nSummary statistics:")
 
-    n_missing = np.sum(np.isnan(data))
+    if hasattr(data, "isnull"):
+        n_missing = np.sum(data.isnull())
+    else:
+        n_missing = np.sum(np.isnan(data))
+
     n_total = data.shape[0]
 
     print("\t{} / {} missing values ({:.3f}%)".format(
@@ -268,8 +271,10 @@ def info(phenotype):
         print("\tmin = {}, max = {}".format(np.nanmin(data), np.nanmax(data)))
 
     elif meta["variable_type"] == "factor":
-        # TODO make a contingency table.
-        pass
+        print("\nCounts (rate):")
+        n = data.shape[0]
+        for name, count in data.value_counts().iteritems():
+            print("\t{}: {} ({:.3f}%)".format(name, count, count / n * 100))
 
 
 @command(args_types=(str, ))

@@ -28,7 +28,7 @@ data:
           question: "History of Palpitations"
 
         - column: PalpFreq
-          name: "Palpitations frequency"
+          name: "Palpitations frequency"  # Maybe rename
           parent: *palpitations
           code: *codeFreq
           type: factor
@@ -44,6 +44,7 @@ data:
           question: "History of Fainting"
 
         - column: FaintAge
+          parent: Fainting
           name: FaintingAge
           type: continuous
           map: &defaultContinuous [[-9, "nan"], [0, "nan"]]
