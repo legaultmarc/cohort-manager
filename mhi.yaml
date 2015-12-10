@@ -22,7 +22,7 @@ data:
         - column: Palp
           name: &palpitations Palpitations
           icd10: R00.2
-          map: &yesNoNa [[1, 1], [2, 0], [9, "nan"]]
+          map: &yesNoNa [[1, 1], [2, 0], [9, "nan"], [-99, "nan"], [-88, "nan"]]
           type: discrete
           crf_page: 16
           question: "History of Palpitations"
@@ -94,7 +94,7 @@ data:
           name: AtrialFibrillationType
           parent: *afib
           type: factor
-          code: codeAFib
+          code: *codeAFib
           crf_page: 17
           question: "AFib: Select type"
 

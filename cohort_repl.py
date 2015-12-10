@@ -9,6 +9,7 @@ A REPL to access cohort information.
 
 import os
 import sys
+import readline
 import sqlite3
 
 import numpy as np
@@ -22,7 +23,7 @@ except ImportError:
     COLOR = False
 
 from cohort_manager.parser import parse_yaml
-from cohort_manager.core import CohortManager
+from cohort_manager.core import CohortManager, CohortDataError
 
 
 plt.style.use("ggplot")
@@ -137,11 +138,17 @@ def main():
         except EOFError:
             print()
             break
-        # except Exception as e:
-        #     message = "\nUnknown error occured.\n"
-        #     if COLOR:
-        #         message = colored(message, "red")
-        #     print("{}\n{}".format(message, e))
+        except CohortDataError as e:
+            message = "\nData integrity error.\n"
+            if COLOR:
+                message = colored(message, "red")
+            print(message)
+            print(e.value)
+        except Exception as e:
+            message = "\nUnknown error occured.\n"
+            if COLOR:
+                message = colored(message, "red")
+            print("{}\n{}".format(message, e))
 
 
 def _get_manager():
@@ -230,7 +237,7 @@ def _get_data_meta(phenotype):
 def info(phenotype):
     """Get information and summary statistics on the phenotype."""
     data, meta = _get_data_meta(phenotype)
-    
+
     print("Phenotype meta data:")
     for k, v in meta.items():
         if COLOR:
@@ -263,6 +270,24 @@ def info(phenotype):
     elif meta["variable_type"] == "factor":
         # TODO make a contingency table.
         pass
+
+
+@command(args_types=(str, ))
+def boxplot(phenotype):
+    """Draw a boxplot for the given continuous phenotype."""
+    data, meta = _get_data_meta(phenotype)
+    data = data[~np.isnan(data)]
+    if meta["variable_type"] != "continuous":
+        raise REPLException("Can't draw boxplot for non-continuous phenotype "
+                            "('{}').".format(phenotype))
+
+    fig, ax = plt.subplots(1, 1)
+    ax.boxplot(data, vert=False)
+    ax.set_xlabel(phenotype)
+    ax.set_yticklabels([])
+    ax.yaxis.set_ticks_position("none")
+
+    plt.show()
 
 
 @command(args_types=(str, int), optional=1)

@@ -1,6 +1,9 @@
 """
 """
 
+from __future__ import division
+
+import collections
 import logging
 import sqlite3
 import os
@@ -10,6 +13,7 @@ import h5py
 import numpy as np
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
+from . import stats
 
 
 logger = logging.getLogger(__name__)
@@ -250,28 +254,149 @@ class CohortManager(object):
         # Check if phenotype is in database (metadata needs to be there before
         # the user binds data).
         self.cur.execute(
-            "SELECT name FROM phenotypes WHERE name=?", (phenotype, )
+            "SELECT name, variable_type, code_name "
+            "FROM phenotypes WHERE name=?",
+            (phenotype, )
         )
-        if self.cur.fetchone() is None:
+        tu = self.cur.fetchone()
+        if tu is None:
             raise ValueError(
                 "Could not find metadata for '{}'. Add the phenotype before "
                 "binding data.".format(phenotype)
             )
+        assert tu[0] == phenotype
+        variable_type = tu[1]
+        code_name = tu[2]
 
-        if self["frozen"] == "yes":
-            n = self.n
-            if len(values) != n:
-                raise ValueError(
-                    "Expected {} values, got {}.".format(n, len(values))
-                )
-
-            if phenotype in self.data["data"].keys():
-                raise ValueError("Data for '{}' is already "
-                                 "in the database.".format(phenotype))
-
-            self.data["data"].create_dataset(phenotype, data=values)
-        else:
+        if self["frozen"] != "yes":
             raise UnknownSamplesError()
+
+        n = self.n
+        if len(values) != n:
+            raise ValueError(
+                "Expected {} values, got {}.".format(n, len(values))
+            )
+
+        if phenotype in self.data["data"].keys():
+            raise ValueError("Data for '{}' is already "
+                             "in the database.".format(phenotype))
+
+        # Type check.
+        if variable_type == "discrete":
+            # We are expecting only 0, 1 and NA.
+            self._check_data_discrete(values, phenotype)
+
+        elif variable_type == "factor":
+            # Make sure the matadata code is consistent with the observed
+            # values.
+            self._check_data_factor(values, phenotype, code_name)
+
+        elif variable_type == "continuous":
+            # If there is less than 5 distinct values, warn the user and
+            # suggest using a different variable type.
+            self._check_data_continuous(values, phenotype)
+
+        else:
+            raise ValueError("Unknown variable type '{}'. Use 'discrete', "
+                             "'factor' or 'continuous'.".format(variable_type))
+
+        self.data["data"].create_dataset(phenotype, data=values)
+
+    def _check_data_discrete(self, values, phenotype):
+        """Check that the data vector is consistent with a discrete variable.
+
+        This is done by making sure that only 0, 1 and NAs are in the vector.
+
+        """
+        extra = set(values[~np.isnan(values)]) - {0, 1}
+        if len(extra) != 0:
+            extra = ", ".join([str(i) for i in list(extra)])
+            raise ValueError(
+                "Authorized values for discrete variables are 0, 1 and np.nan."
+                "\nUnexpected values were observed for '{}' ({})."
+                "".format(phenotype, extra)
+            )
+
+    def _check_data_factor(self, values, phenotype, code_name):
+        """Check that the data vector is consistent with a factor variable.
+
+        This is done by looking at the code from the database and making sure
+        that all the observed integer codes are defined.
+
+        """
+        # Get the code.
+        self.cur.execute(
+            "SELECT key, value FROM code WHERE name=?",
+            (code_name, )
+        )
+        mapping = self.cur.fetchall()
+        if not mapping:
+            raise CohortDataError("Could not find the code for factor "
+                                  "variable '{}'. The code name is "
+                                  "'{}'.".format(phenotype, code_name))
+
+        # Check if the set of observed values is consistent with the code.
+        observed = set(values[~np.isnan(values)])
+        expected = set([i[0] for i in mapping])
+        extra = observed - expected
+        if extra:
+            raise CohortDataError("Unknown encoding value(s) ({}) for factor "
+                                  "variables '{}'.".format(extra, phenotype))
+
+    def _check_data_continuous(self, values, phenotype):
+        """Check that the data vector is continuous.
+
+        This is very hard to check.
+
+        After taking the outlier data points (arbitrarily defined as):
+
+            |x| > 3 * median absolute deviation + median
+
+        We take the most common outlier if it consists of at least 50% of the
+        identified data points. If such a value exist, we suggest to the
+        user that it might be a weird value arising from bad missing variable
+        coding.
+
+        Also, if there is less than 5 distinct values in either the full vector
+        or a random sample of 5000 elements, a warning will be displayed
+        prompting the user to verify the data type.
+
+        """
+        values = values[~np.isnan(values)]
+
+        # Factor check.
+        # Sample up to 5000 samples to see the number of distinct values.
+        if values.shape[0] > 5000:
+            sample_set = set(values)
+        else:
+            sample_set = set(np.random.choice(values, 5000))
+
+        if len(sample_set) < 5:
+            logger.warning("The phenotype '{}' is marked as continuous, but "
+                           "it has a lot of redundancy. Perhaps it should be "
+                           "modeled as a factor or another variable type."
+                           "".format(phenotype))
+
+        # Outlier check.
+        median, mad = stats.median_absolute_deviation(
+            values, return_median=True
+        )
+        outliers = values[
+            (values < median - 3 * mad) | (values > median + 3 * mad)
+        ]
+
+        n_outliers = outliers.shape[0]
+        if n_outliers <= 5:
+            return
+
+        counter = collections.Counter(outliers)
+        most_common_outlier, count = counter.most_common(1)[0]
+
+        if count >= n_outliers / 2:
+            logger.warning("The value '{}' is commonly found in the tails "
+                           "of the distribution for '{}'. This could be "
+                           "because of bad coding of missing values."
+                           "".format(most_common_outlier, phenotype))
 
     # Get information.
     def get_samples(self):
@@ -299,6 +424,11 @@ class CohortManager(object):
         if li:
             li = [tu[0] for tu in li]
         return li
+
+    def get_code(self, name):
+        """Get the integer mappings for a given code."""
+        self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
+        return self.cur.fetchall()
 
     def get_data(self, phenotype):
         """Get a phenotype vector."""
@@ -338,11 +468,13 @@ class CohortManager(object):
             def _print(s):
                 raise CohortDataError(s)
 
-        self.check_phenotype_has_data(_print)
+        self.check_phenotypes_have_data(_print)
         self.hierarchical_reclassify()
 
-    def check_phenotype_has_data(self, printer):
+    def check_phenotypes_have_data(self, printer):
         """Check that all the phenotypes in the database have data entries."""
+        logger.info("Making sure that data is available for all phenotypes "
+                    "in the database.")
         missing = set()
         available = set(self.data["data"].keys())
         self.cur.execute("SELECT name FROM phenotypes")
