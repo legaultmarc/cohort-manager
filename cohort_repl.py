@@ -245,11 +245,7 @@ def info(phenotype):
 
     print("\nSummary statistics:")
 
-    if hasattr(data, "isnull"):
-        n_missing = np.sum(data.isnull())
-    else:
-        n_missing = np.sum(np.isnan(data))
-
+    n_missing = STATE["manager"].get_number_missing(phenotype)
     n_total = data.shape[0]
 
     print("\t{} / {} missing values ({:.3f}%)".format(

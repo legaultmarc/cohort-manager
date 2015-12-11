@@ -6,6 +6,7 @@ from __future__ import division
 import collections
 import logging
 import sqlite3
+import atexit
 import os
 
 import six
@@ -58,6 +59,8 @@ class CohortManager(object):
 
         self._discover_install()
         self.tree = None  # This is built when the manager is commited.
+
+        atexit.register(self._hdf5_close)
 
     def _discover_install(self):
         """Check if there is a retrievable manager at location.
@@ -170,8 +173,14 @@ class CohortManager(object):
     def __exit__(self, *args):
         return self.close()
 
+    def _hdf5_close(self):
+        try:
+            self.data.close()
+        except Exception:
+            pass
+
     def close(self):
-        self.data.close()
+        self._hdf5_close()
         self.con.commit()
         self.con.close()
 
@@ -570,3 +579,65 @@ class CohortManager(object):
 
             # Write to HDF5
             self.data["data/" + node.data.name][...] = data
+
+    def get_number_unaffected(self, phenotype):
+        """Robust function to get the number of unaffected samples for a given
+        phenotype.
+
+        If the parent of a variable is unaffected (only valid for discrete
+        variables), then it is unaffected, even though it will be marked as
+        NA in the HDF5 container.
+
+        .. warning::
+            This does not take into account arbitrary factor values values to
+            identify unaffected individuals.
+
+        """
+        # Find the node from it's root.
+        found = False
+        for node in self.tree.depth_first_traversal():
+            if node.data.name == phenotype:
+                found = True
+                break
+
+        if not found:
+            raise ValueError(
+                "Phenotype '{}' is not in database.".format(phenotype)
+            )
+
+        # Walk back from the node to the root.
+        cur = node
+        path = collections.deque([cur])
+        while cur.parent:
+            path.appendleft(cur.parent)
+            cur = cur.parent
+
+        # Walk the path to find all the unaffected individuals as marked in the
+        # hierarchy.
+        unaffected = None
+        for node in path:
+            if node.data.variable_type == "discrete":
+                # Get the data vector.
+                data = self.get_data(node.data.name, numpy=True)
+                if unaffected is None:
+                    unaffected = (data == 0)
+                else:
+                    unaffected |= (data == 0)
+
+        return np.sum(unaffected) if unaffected is not None else 0
+
+
+    def get_number_missing(self, phenotype):
+        """Get the true number of missing data points."""
+        n_unaffected = self.get_number_unaffected(phenotype)
+        meta = self.get_phenotype(phenotype)
+        data = self.get_data(phenotype, numpy=True)
+
+        if meta["variable_type"] == "discrete":
+            return np.sum(np.isnan(data))
+        elif meta["variable_type"] == "factor":
+            nans = np.sum(data.isnull())
+            return nans - n_unaffected
+        elif meta["variable_type"] == "continuous":
+            nans = np.sum(np.isnan(data))
+            return nans - n_unaffected
