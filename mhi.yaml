@@ -9,7 +9,7 @@ codes:
       code: [[1, Paroxysmal], [2, Persistent], [3, Permanent], [4, Unknown]]
 
 data:
-    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/Arrythmia.txt"
+    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/Arrythmia.txt"
       engine: "read_csv"
       sep: ";"
       header: 0
@@ -19,10 +19,11 @@ data:
       # Maps are used to recode discrete variables.
       # Codes should be used for factors.
       variables:
+        # Page 17
         - column: Palp
           name: &palpitations Palpitations
           icd10: R00.2
-          map: &yesNoNa [[1, 1], [2, 0], [9, "nan"], [-99, "nan"], [-88, "nan"]]
+          map: &yesNoNa [[1, 1.0], [2, 0.0], [9, "nan"], [-99, "nan"], [-88, "nan"]]
           type: discrete
           crf_page: 16
           question: "History of Palpitations"
@@ -191,4 +192,53 @@ data:
           crf_page: 17
           question: "History of Other Arrhythmia"
 
-# PAGE 18 demain...
+        # Page 18
+        - column: ArrhTx
+          name: &arrhTx HistoryOfTreatmentForArrhythmia
+          type: discrete
+          map: *yesNoNa
+          crf_page: 18
+          question: "History of Arrhythmia Treatment"
+
+        - column: ArrhTxPace
+          name: Pacemaker
+          parent: *arrhTx
+          type: discrete
+          crf_page: 18
+          question: "Treatment: Multiple choice - Pacemaker"
+
+        - column: ArrhTxPaceYear
+          name: PacemakerYear
+          parent: Pacemaker
+          type: continuous
+          map: *defaultContinuous
+          crf_page: 18
+          question: "Treatment: Multiple choice - Pacemaker Year"
+
+        - column: ArrhTxImpl
+          name:  ImplantableCardiovertorDefibrillator  # Mistake in dictionary.
+          parent: *arrhTx
+          map: [[2, 1]]
+          type: discrete
+          crf_page: 18
+          question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator"
+
+        - column: ArrhTxImplYear
+          name: ImplCardiovertorDefib
+          parent: ImplantableCardiovertorDefibrillator
+          type: continuous
+          map: *defaultContinuous
+          crf_page: 18
+          question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator Year"
+
+    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/VS.txt"
+      engine: "read_csv"
+      sep: ";"
+      header: 0
+      index: ProjectId
+
+      variables:
+        - column: Weight
+          name: &weight Weight
+          map: [[-99, "nan"], [-88, "nan"], [-77, "nan"]]
+          type: continuous

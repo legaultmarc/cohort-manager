@@ -3,16 +3,14 @@ Parse the YAML file used to build the cohort.
 """
 
 import os
-import uuid
 import shutil
 import logging
-import itertools
 
 import yaml
 import pandas as pd
 import numpy as np
 
-from .core import CohortManager, UnknownSamplesError
+from .core import CohortManager, UnknownSamplesError, vector_map
 
 
 ENGINES = {}
@@ -130,7 +128,6 @@ def _handle_file_node(manager, node):
 
             raise UnknownSamplesError(msg)
 
-
         data = data.loc[samples, :]
         assert np.all(samples == data.index)
     else:
@@ -173,7 +170,18 @@ def _handle_variable_node(manager, node, data):
 
     # Apply mapper.
     if _map:
-        data = _apply_mapper(data, _map, _type)
+        for i, tu in enumerate(_map):
+            if tu[1] == "nan":
+                _map[i][1] = np.nan
+            # We always cast the target to float.
+            else:
+                _map[i][1] = float(_map[i][1])
+
+        if _type in ("continuous", "discrete"):
+            data = vector_map(data, _map)
+        else:
+            raise TypeError("Can't map variables that are not 'discrete' or "
+                            "'continuous'.")
 
     # Add the phenotype to the database.
     manager.add_phenotype(
@@ -187,48 +195,6 @@ def _handle_variable_node(manager, node, data):
     )
 
     manager.add_data(name, data)
-
-
-def _apply_mapper(data, _map, _type):
-    """Process data by applying a mapping function.
-
-    :param data: A numpy array.
-    :param _map: A list of key value mappings [("a", 1), ("b", 2"), ...]
-    :param _type: Either "discrete", "continuous" or "factor"
-
-    """
-    if _type not in ("discrete", "continuous"):
-        raise InvalidConfig(
-            "Invalid variable type '{}'. Recoding using maps can only be used "
-            "for discrete and continuous variables.".format(_type)
-        )
-
-    # We use a transitive mapping strategy.
-    # Given a list of key value pairs, we do:
-    # [(k, v), (k, v), ...] -> [(k, h), (k, h), ...] && [(h, v), (h, v), ...]
-    # with h not in dataset.
-    # To make sure that no collisions happend.
-    transitive_mapper = [{}, {}]
-    map_values = set(itertools.chain(*_map))
-    for key, value in _map:
-        if key == "nan":
-            raise ValueError("nan can't be used a mapper key.")
-        if value == "nan":
-            value = np.nan
-
-        transitive_key = hash(str(uuid.uuid4()))  # This is a long number.
-        assert transitive_key not in [i[0] for i in _map]
-        assert transitive_key not in [i[1] for i in _map]
-
-        transitive_mapper[0][key] = transitive_key
-        transitive_mapper[1][transitive_key] = value
-
-        # Do the transitive mapping.
-        data = data.astype(float)
-        data[data == key] = transitive_key
-        data[data == transitive_key] = value
-
-    return data
 
 
 class engine(object):

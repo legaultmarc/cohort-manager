@@ -7,6 +7,7 @@ import collections
 import logging
 import sqlite3
 import atexit
+import uuid
 import os
 
 import six
@@ -103,7 +104,7 @@ class CohortManager(object):
             " name TEXT PRIMARY KEY,"
             " icd10 TEXT,"
             " parent TEXT,"
-            " variable_type TEXT,"
+            " variable_type TEXT NOT NULL,"
             " crf_page INTEGER,"
             " question TEXT,"
             " code_name TEXT,"
@@ -214,7 +215,7 @@ class CohortManager(object):
             - code_name
 
         .. todo::
-            Check that the ``code_name`` is the the ``code`` table.
+            Check that the ``code_name`` is in the ``code`` table.
 
         """
         self._check_phenotype_fields(kwargs.keys())
@@ -224,6 +225,39 @@ class CohortManager(object):
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
         )
+
+    def update_phenotype(self, name, **kwargs):
+        """Update an existing phenotype.
+
+        .. todo::
+            Add checks for parent and code by making sure the relationships
+            hold in the database.
+
+        """
+        # Get the phenotype to make sure it exists.
+        self.get_phenotype(name)
+
+        updates = []
+        for key, value in kwargs.items():
+            if key not in PHENOTYPE_COLUMNS:
+                raise TypeError("Unexpected column '{}' for phenotype."
+                                "".format(key))
+            elif value is None:
+                # NULL values.
+                updates.append("{}=NULL".format(key))
+            elif key == "crf_page":
+                # Integer.
+                updates.append("{}={}".format(key, int(value)))
+            else:
+                # Strings.
+                updates.append("{}='{}'".format(key, value))
+        updates = ",".join(updates)
+
+        self.cur.execute(
+            "UPDATE phenotypes SET {} WHERE name=?".format(updates),
+            (name, )
+        )
+        self.commit()
 
     def add_phenotypes(self, li):
         """Batch insert phenotypes into the database."""
@@ -292,6 +326,7 @@ class CohortManager(object):
                              "in the database.".format(phenotype))
 
         # Type check.
+        values = np.array(values)
         if variable_type == "discrete":
             # We are expecting only 0, 1 and NA.
             self._check_data_discrete(values, phenotype)
@@ -423,6 +458,8 @@ class CohortManager(object):
             (phenotype, )
         )
         out = self.cur.fetchone()
+        if out is None:
+            raise KeyError("Could not find phenotype '{}'.".format(phenotype))
         out = dict(zip(PHENOTYPE_COLUMNS, out))
 
         return out
@@ -626,7 +663,6 @@ class CohortManager(object):
 
         return np.sum(unaffected) if unaffected is not None else 0
 
-
     def get_number_missing(self, phenotype):
         """Get the true number of missing data points."""
         n_unaffected = self.get_number_unaffected(phenotype)
@@ -641,3 +677,139 @@ class CohortManager(object):
         elif meta["variable_type"] == "continuous":
             nans = np.sum(np.isnan(data))
             return nans - n_unaffected
+
+    def variable(self, name):
+        """Returns a variable object usable to create virtual phenotypes.
+
+        Here are illustrative examples of how to use this given an instance
+        of CohortManager (named `manager`)
+
+        >>> v = manager.variable
+        >>> age_at_event = v("yearOfEvent") - v("birthYear")
+        array([25., 42., 70., 31.])
+        >>> syndrome = (v("arrhythmia") | v("pacemaker")) & (v("age") < 50)
+        >>> obese = (v("mass") / (v("height") ** 2)) > 30
+
+        """
+        data = self.get_data(name, numpy=True)
+        return _Variable(data)
+
+
+class _Variable(object):
+    """Building block to construct virtual phenotypes."""
+    def __init__(self, data):
+        self.data = data
+
+    def __gt__(self, o):
+        return _Variable(self.data > getattr(o, "data", o))
+
+    def __lt__(self, o):
+        return _Variable(self.data < getattr(o, "data", o))
+
+    def __ge__(self, o):
+        return _Variable(self.data >= getattr(o, "data", o))
+
+    def __le__(self, o):
+        return _Variable(self.data <= getattr(o, "data", o))
+
+    def __eq__(self, o):
+        return _Variable(self.data == getattr(o, "data", o))
+
+    def __ne__(self, o):
+        return _Variable(self.data != getattr(o, "data", o))
+
+    def __and__(self, o):
+        # Only works for two vectors that can be understood as discrete
+        # variables.
+        o = o.data if isinstance(o, _Variable) else o
+        return _Variable((self.data == 1) & (o == 1))
+
+    def __rand__(self, o):
+        return self.__and__(o)
+
+    def __or__(self, o):
+        o = o.data if isinstance(o, _Variable) else o
+        return _Variable((self.data == 1) | (o == 1))
+
+    def __invert__(self):
+        missings = np.isnan(self.data)
+        if (set(self.data[~missings]) - {0, 1}):
+            raise TypeError("Can't invert non-discrete variable.")
+
+        data = self.data.astype(float)
+        data[data == 1] = 2
+        data[data == 0] = 1
+        data -= 1
+        return _Variable(data)
+
+    def __nonzero__(self):
+        raise TypeError("The boolean 'not' operation is implemented using "
+                        "the '~' operator.")
+
+    def log(self):
+        return _Variable(np.log(self.data))
+
+
+def vector_map(data, _map):
+    """Remaps numeric values in a data vector.
+
+    :param data: A numpy array of integer or float dtype.
+    :param _map: A list of tuple representing the mappings.
+                 Alternatively, a dict can be provided directly.
+                 ``[(2, 1), (1, 0), (3, -10)]`` would transform all the
+                 ``2 -> 1``, ``1 -> 0`` and ``3 -> -10``.
+    :returns: A remapped numpy array.
+
+    The strategy used to avoid collisions when sequentially remapping is to
+    use transitive mapping. This means that the mapping is done in two steps:
+    A mapping to a unique (random) value and then a subsequent mapping to the
+    target value.
+    This strategy is only used if there are collisions.
+
+    """
+
+    if type(_map) is not dict:
+        _map = dict(_map)
+
+    # Check the dtype of the vector and the map.
+    if np.issubdtype(data.dtype, int):
+        source_dtype = int
+    elif np.issubdtype(data.dtype, float):
+        source_dtype = float
+    else:
+        raise TypeError("Invalid dtype: '{}'. This function only allows "
+                        "int or float vectors.".format(data.dtype))
+
+    keys = set(_map.keys())
+    targets = set(_map.values())
+
+    # Infer the target dtype.
+    target_dtype = set([float if np.isnan(t) else type(t) for t in targets])
+
+    if len(target_dtype) != 1:
+        raise TypeError("Ambiguous target dtype. Make sure that the provided "
+                        "mapper uses consistent type for the second element "
+                        "of the tuples.")
+    target_dtype = target_dtype.pop()
+
+    if target_dtype is int and source_dtype is float:
+        raise TypeError("Remapping floats to integers is not possible "
+                        "because of lost of data in type cast (this can "
+                        "be fixed by using floats as the target values).")
+
+    out = data.astype(target_dtype)
+
+    for key, target in _map.items():
+        if np.isnan(key):
+            raise TypeError("Can't use NaNs as mapping keys.")
+
+        if target in keys:
+            # There will be a collision, so we need to use the transitive
+            # mapping.
+            transitive_key = hash(str(uuid.uuid4()))
+            out[data == key] = transitive_key
+            out[out == transitive_key] = target
+        else:
+            out[data == key] = target
+
+    return out

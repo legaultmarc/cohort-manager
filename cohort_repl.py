@@ -9,10 +9,14 @@ A REPL to access cohort information.
 
 import os
 import sys
-import readline
+import json
+import shlex
 import sqlite3
+import readline
+import argparse
 
 import numpy as np
+import scipy.stats
 import matplotlib.pyplot as plt
 
 from six.moves import input
@@ -30,18 +34,14 @@ plt.style.use("ggplot")
 
 
 REGISTERED_COMMANDS = {}
-STATE = {}
+STATE = {"DEBUG": False}
 
 
 def dispatch_command(line):
     if not line:
         return
 
-    line = line.strip()
-    if line == "?":
-        return help()
-
-    line = line.split()
+    line = shlex.split(line.strip())
 
     # Find command.
     cmd = REGISTERED_COMMANDS.get(line[0])
@@ -52,46 +52,21 @@ def dispatch_command(line):
     if not cmd.args_types:
         return cmd()
 
-    # Argument parsing.
-    # Support for quoted arguments.
-    # i.e. ["'This", "was", "quoted'"] => ["This was quoted"]
-    quotes = {"\"", "'"}
-    parsed_args = []
-    i = 1
-    while i <= len(line[1:]):
-
-        if line[i][0] in quotes:
-
-            quote = line[i][0]
-            block = line[i]
-            while line[i][-1] != quote:
-                i += 1
-                if i > len(line[1:]):
-                    raise REPLException("Could not parse argument, missing "
-                                        "closing quote.")
-                block += " {}".format(line[i])
-
-            parsed_args.append(block.strip(quote))
-
-        else:
-            parsed_args.append(line[i])
-
-        i += 1
-
     # Parse the arguments.
-    n = len(parsed_args)
+    line = line[1:]
+    n = len(line)
     # If less than minimum or more than maximum number of expected args.
     if not ((len(cmd.args_types) - cmd.optional) <= n <= len(cmd.args_types)):
         raise REPLException(
             "Command '{}' expected {} arguments ({} provided).".format(
-                cmd.func_name, len(cmd.args_types), n
+                cmd.__name__, len(cmd.args_types), n
             )
         )
 
-    for i, arg in enumerate(parsed_args):
-        parsed_args[i] = cmd.args_types[i](arg)
+    for i, arg in enumerate(line):
+        line[i] = cmd.args_types[i](arg)
 
-    cmd(*parsed_args)
+    cmd(*line)
 
 
 class REPLException(Exception):
@@ -105,13 +80,13 @@ class command(object):
             # This function takes no arguments.
             f = args[0]
             f.args_types = None
-            REGISTERED_COMMANDS[f.func_name] = f
+            REGISTERED_COMMANDS[f.__name__] = f
 
         self.args_types = kwargs.get("args_types")
         self.optional = kwargs.get("optional", 0)
 
     def __call__(self, f):
-        REGISTERED_COMMANDS[f.func_name] = f
+        REGISTERED_COMMANDS[f.__name__] = f
         f.args_types = self.args_types
         f.optional = self.optional
         return f
@@ -145,6 +120,10 @@ def main():
             print(message)
             print(e.value)
         except Exception as e:
+            if STATE["DEBUG"]:
+                # FIXME print full traceback.
+                raise e
+
             message = "\nUnknown error occured.\n"
             if COLOR:
                 message = colored(message, "red")
@@ -157,6 +136,22 @@ def _get_manager():
         raise REPLException("You need to load a cohort before you can "
                             "execute operations on it.")
     return manager
+
+
+def _get_data_meta(phenotype):
+    manager = _get_manager()
+    try:
+        data = manager.get_data(phenotype, numpy=True)
+    except KeyError:
+        raise REPLException("Could not find data for '{}'.".format(phenotype))
+
+    meta = manager.get_phenotype(phenotype)
+    if not meta:
+        raise REPLException(
+            "Could not find database entry for '{}'.".format(phenotype)
+        )
+
+    return data, meta
 
 
 @command
@@ -214,22 +209,6 @@ def list():
     """List available phenotypes."""
     manager = _get_manager()
     manager.tree.pretty_print()
-
-
-def _get_data_meta(phenotype):
-    manager = _get_manager()
-    try:
-        data = manager.get_data(phenotype, numpy=True)
-    except KeyError:
-        raise REPLException("Could not find data for '{}'.".format(phenotype))
-
-    meta = manager.get_phenotype(phenotype)
-    if not meta:
-        raise REPLException(
-            "Could not find database entry for '{}'.".format(phenotype)
-        )
-
-    return data, meta
 
 
 @command(args_types=(str, ))
@@ -317,6 +296,50 @@ def histogram(phenotype, nbins=None):
 
 
 @command(args_types=(str, ))
+def normal_qq_plot(phenotype):
+    """Plot the Normal QQ plot of the observations."""
+    data, meta = _get_data_meta(phenotype)
+    data = data[~np.isnan(data)]
+    if meta["variable_type"] != "continuous":
+        raise REPLException(
+            "Could not create QQ plot for {} variable '{}'.".format(
+                meta["variable_type"], phenotype
+            )
+        )
+
+    data = np.sort(data)
+    expected = scipy.stats.norm.ppf(
+        np.arange(1, data.shape[0] + 1) / (data.shape[0] + 1),
+        loc=np.mean(data),
+        scale=np.std(data)
+    )
+
+    plt.scatter(expected, data, color="black", marker="o", s=10)
+
+    x_min, x_max = plt.xlim()
+    y_min, y_max = plt.ylim()
+
+    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(
+        expected, data
+    )
+    plt.plot(
+        [x_min, x_max],
+        [slope * x_min + intercept, slope * x_max + intercept],
+        "--", color="black",
+        label="$R^2 = {:.4f}$".format(r_value ** 2)
+    )
+    plt.legend(loc="lower right")
+
+    plt.xlabel("Expected quantiles")
+    plt.ylabel("Observed quantiles")
+
+    plt.xlim([x_min, x_max])
+    plt.ylim([y_min, y_max])
+
+    plt.show()
+
+
+@command(args_types=(str, ))
 def load(path):
     """Load the cohort from it's path on disk."""
     if not os.path.isdir(path):
@@ -335,11 +358,50 @@ def load(path):
     STATE["manager"].rebuild_tree()
 
 
+@command(args_types=(str, ))
+def update(phenotype):
+    """Update the metadata for a given phenotype."""
+    data, meta = _get_data_meta(phenotype)
+    meta.pop("name")
+
+    def hook():
+        readline.insert_text(json.dumps(meta))
+        readline.redisplay()
+
+    readline.set_pre_input_hook(hook)
+    new_data = input("(json)>>> ")
+    readline.set_pre_input_hook()
+
+    new_data = json.loads(new_data)
+    meta.update(new_data)
+
+    # Update in db.
+    _get_manager().update_phenotype(phenotype, **meta)
+
+
 @command
 def validate():
     """Run data balidation routine."""
-    STATE["manager"].validate(mode="warn")
+    _get_manager().validate(mode="warn")
+
+
+@command(args_types=(str, str, str))
+def virtual(name, variable_type, expression):
+    """Create a virtual variable with the given name."""
+    if variable_type not in ("discrete", "continuous", "factor"):
+        raise REPLException("Invalid variable type.")
+
+    manager = _get_manager()
+    variable = eval(expression, {}, dict(v=manager.variable))
+    manager.add_phenotype(name=name, variable_type=variable_type)
+    manager.add_data(name, variable.data)
+    manager.commit()
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
+
+    STATE["DEBUG"] = args.debug
     main()
