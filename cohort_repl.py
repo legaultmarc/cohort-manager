@@ -34,7 +34,7 @@ plt.style.use("ggplot")
 
 
 REGISTERED_COMMANDS = {}
-STATE = {"DEBUG": False}
+STATE = {"DEBUG": False, "PAGER": True}
 
 
 def dispatch_command(line):
@@ -109,7 +109,6 @@ def main():
 
         except KeyboardInterrupt:
             print()
-            break
         except EOFError:
             print()
             break
@@ -208,7 +207,8 @@ def sql(sql):
 def list():
     """List available phenotypes."""
     manager = _get_manager()
-    manager.tree.pretty_print()
+    pager = (manager.get_number_phenotypes() > 24) and STATE["PAGER"]
+    manager.tree.pretty_print(pager)
 
 
 @command(args_types=(str, ))
@@ -392,16 +392,34 @@ def virtual(name, variable_type, expression):
         raise REPLException("Invalid variable type.")
 
     manager = _get_manager()
-    variable = eval(expression, {}, dict(v=manager.variable))
+    try:
+        variable = eval(expression, {}, dict(v=manager.variable))
+    except Exception as e:
+        raise REPLException("Invalid expression for virtual variable.\n" +
+                            str(getattr(e, "message", str(e))))
+
     manager.add_phenotype(name=name, variable_type=variable_type)
-    manager.add_data(name, variable.data)
+    try:
+        manager.add_data(name, variable.data)
+    except ValueError as e:
+        raise REPLException(
+            "Provided data type is incorrect.\n{}".format(e.message)
+        )
     manager.commit()
+
+
+@command(args_types=(str, ))
+def delete(phenotype):
+    manager = _get_manager()
+    manager.delete(phenotype)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--disable-pager", action="store_false")
     args = parser.parse_args()
 
     STATE["DEBUG"] = args.debug
+    STATE["PAGER"] = args.disable_pager
     main()

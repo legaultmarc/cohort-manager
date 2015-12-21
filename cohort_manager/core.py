@@ -12,8 +12,10 @@ import os
 
 import six
 import h5py
+import scipy.stats
 import numpy as np
 import pandas as pd
+from six.moves import range
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import stats
@@ -36,8 +38,8 @@ class UnknownSamplesError(Exception):
 
 class FrozenCohortError(Exception):
     def __str__(self):
-        return ("Once the sample order has been set, it is impossible to "
-                "change without rebuilding the database.")
+        return ("Once the sample order has been set, it is fixed and can't "
+                "be changed.")
 
 
 class CohortDataError(Exception):
@@ -277,11 +279,7 @@ class CohortManager(object):
             self.add_code(*element)
 
     def set_samples(self, samples):
-        """Set the samples.
-
-        Once this is set, it can't be changed without rebuilding the database.
-
-        """
+        """Set the samples IDs and order."""
         if samples:
             assert isinstance(samples[0], six.string_types), (
                 "Sample IDs need to be strings."
@@ -355,7 +353,9 @@ class CohortManager(object):
         """
         extra = set(values[~np.isnan(values)]) - {0, 1}
         if len(extra) != 0:
-            extra = ", ".join([str(i) for i in list(extra)])
+            extra = ", ".join([str(i) for i in list(extra)[:5]])
+            if len(extra) > 5:
+                extra += ", ..."
             raise ValueError(
                 "Authorized values for discrete variables are 0, 1 and np.nan."
                 "\nUnexpected values were observed for '{}' ({})."
@@ -464,6 +464,11 @@ class CohortManager(object):
 
         return out
 
+    def get_number_phenotypes(self):
+        """Returns the number of phenotypes."""
+        self.cur.execute("SELECT count(*) FROM phenotypes")
+        return self.cur.fetchone()[0]
+
     def get_phenotypes_list(self):
         """Get a list of available phenotypes from the db."""
         self.cur.execute("SELECT name FROM phenotypes;")
@@ -532,6 +537,14 @@ class CohortManager(object):
             "SELECT DISTINCT name FROM code;"
         )
         return set([i[0] for i in self.cur.fetchall()])
+
+    def delete(self, phenotype):
+        """Remove a phenotype from the manager."""
+        self.cur.execute(
+            "DELETE FROM phenotypes WHERE name=?", (phenotype, )
+        )
+        del self.data["data/{}".format(phenotype)]
+        self.commit()
 
     def validate(self, mode="raise"):
         """Run a batch of data validation checks.
@@ -692,6 +705,10 @@ class CohortManager(object):
 
         """
         data = self.get_data(name, numpy=True)
+        meta = self.get_phenotype(name)
+        if meta["variable_type"] not in ("continuous", "discrete"):
+            raise TypeError("The virtual variable system can only be used "
+                            "with continuous and discrete variables.")
         return _Variable(data)
 
 
@@ -699,41 +716,129 @@ class _Variable(object):
     """Building block to construct virtual phenotypes."""
     def __init__(self, data):
         self.data = data
+        self.nans = np.isnan(self.data)
+
+    def _discrete_comparison(self, a, b, function, nans=None):
+        """Apply a comparison operator in discrete space."""
+        # The cohort manager uses floats to represent discrete outcomes.
+        values = function(a, b).astype(float)
+        if nans is not None:
+            values[nans] = np.nan
+        return _Variable(values)
 
     def __gt__(self, o):
-        return _Variable(self.data > getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a > b, self.nans)
 
     def __lt__(self, o):
-        return _Variable(self.data < getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a < b, self.nans)
 
     def __ge__(self, o):
-        return _Variable(self.data >= getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a >= b, self.nans)
 
     def __le__(self, o):
-        return _Variable(self.data <= getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a <= b, self.nans)
 
     def __eq__(self, o):
-        return _Variable(self.data == getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a == b, self.nans)
 
     def __ne__(self, o):
-        return _Variable(self.data != getattr(o, "data", o))
+        return self._discrete_comparison(self.data, getattr(o, "data", o),
+                                         lambda a, b: a != b, self.nans)
+
+    def _boolean_operation(self, a, b, function, nans="both"):
+        """Apply a boolean operation in discrete space.
+
+        For this function nans can be "both" or "any". If it is "any" NaNs will
+        be propagated if they are observed in any of the two vectors.
+        This is the desired bahavious for the AND operation.
+
+        If nans is "both", then it is only propagated if both vectors have a
+        NaN value at the given position. This is the desired behavious for
+        OR.
+
+        """
+        # Check the types.
+        vectors = [a, b]
+        for i, vector in enumerate(vectors):
+            if not isinstance(a, np.ndarray):
+                raise TypeError("Boolean operations are only supported on "
+                                "numpy arrays.")
+            values = set(np.unique(vector[~np.isnan(vector)]))
+            if values == {0, 1}:
+                # This is the encoding we want.
+                pass
+            elif values == {True, False}:
+                # Recode as floats.
+                vectors[i] = vectors[i].astype(float)
+            else:
+                raise TypeError("Ambiguous encoding for boolean operations.")
+
+        # Check size.
+        if a.shape != b.shape:
+            raise TypeError("Shape mismatch between a and b.")
+
+        # Perform the comparison.
+        if nans == "both":
+            nans = np.isnan(a) & np.isnan(b)
+        elif nans == "any":
+            nans = np.isnan(a) | np.isnan(b)
+        else:
+            raise TypeError("Invalid value for the nan parameter. Use 'any' "
+                            "or 'both'.")
+
+        values = function(a, b).astype(float)
+        values[nans] = np.nan
+        return _Variable(values)
 
     def __and__(self, o):
         # Only works for two vectors that can be understood as discrete
         # variables.
-        o = o.data if isinstance(o, _Variable) else o
-        return _Variable((self.data == 1) & (o == 1))
+        return self._boolean_operation(self.data, o.data,
+                                       lambda a, b: (a == 1) & (b == 1),
+                                       "any")
 
     def __rand__(self, o):
         return self.__and__(o)
 
     def __or__(self, o):
+        return self._boolean_operation(self.data, o.data,
+                                       lambda a, b: (a == 1) | (b == 1),
+                                       "any")
+
+    def __ror__(self, o):
+        return self.__or__(o)
+
+    def __sub__(self, o):
         o = o.data if isinstance(o, _Variable) else o
-        return _Variable((self.data == 1) | (o == 1))
+        return _Variable(self.data - o)
+
+    def __add__(self, o):
+        o = o.data if isinstance(o, _Variable) else o
+        return _Variable(self.data + o)
+
+    def __div__(self, o):
+        o = o.data if isinstance(o, _Variable) else o
+        return _Variable(self.data / o)
+
+    __truediv__ = __div__
+
+    def __mul__(self, o):
+        o = o.data if isinstance(o, _Variable) else o
+        return _Variable(self.data * o)
+
+    def __pow__(self, a):
+        if not (type(a) in (int, float)):
+            raise TypeError("The power operator can only be used with "
+                            "constant powers.")
+        return _Variable(self.data ** a)
 
     def __invert__(self):
-        missings = np.isnan(self.data)
-        if (set(self.data[~missings]) - {0, 1}):
+        if not self._is_discrete():
             raise TypeError("Can't invert non-discrete variable.")
 
         data = self.data.astype(float)
@@ -747,7 +852,29 @@ class _Variable(object):
                         "the '~' operator.")
 
     def log(self):
+        if self._is_discrete():
+            raise TypeError(
+                "'log' is only available for continuous variables."
+            )
         return _Variable(np.log(self.data))
+
+    def mean(self):
+        if self._is_discrete():
+            raise TypeError(
+                "'mean' is only available for continuous variables."
+            )
+        return _Variable(np.nanmean(self.data))
+
+    def std(self):
+        if self._is_discrete():
+            raise TypeError(
+                "'std' is only available for continuous variables."
+            )
+        return _Variable(np.nanstd(self.data))
+
+    def _is_discrete(self):
+        observed = set(np.unique(self.data[~self.nans]))
+        return observed == {0, 1}
 
 
 def vector_map(data, _map):

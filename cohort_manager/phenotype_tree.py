@@ -14,6 +14,9 @@ TODO For now, it's only for the explicit tree.
 
 from __future__ import print_function
 import collections
+import subprocess
+
+from six import StringIO as StringIO
 
 
 PHENOTYPE_COLUMNS = ("name", "icd10", "parent", "variable_type", "crf_page",
@@ -51,21 +54,32 @@ class PhenotypeTree(object):
         for root in self.roots:
             assert isinstance(root, Node)
 
-    def pretty_print(self):
+    def pretty_print(self, pager=False):
         """Draw the tree in the terminal window."""
+        s = StringIO()
         for root in self.roots:
-            self._pretty_print_subtree(root)
+            self._pretty_print_subtree(root, string=s)
 
-    def _pretty_print_subtree(self, node, depth=0):
+        s = s.getvalue().rstrip()
+        if pager:
+            proc = subprocess.Popen(["less"], stdin=subprocess.PIPE)
+            proc.communicate(input=s)
+        else:
+            print(s)
+
+    def _pretty_print_subtree(self, node, string, depth=0):
         """Print a node and it's children."""
         bullets = ["+", "-"]
         if depth > 0:
-            print("\t" * depth, bullets[depth % len(bullets)], node.data.name)
+            print(
+                "\t" * depth, bullets[depth % len(bullets)], node.data.name,
+                file=string
+            )
         else:
-            print(node.data.name)
+            print(node.data.name, file=string)
 
         for child in node.children:
-            self._pretty_print_subtree(child, depth=depth+1)
+            self._pretty_print_subtree(child, string, depth=depth+1)
 
     def depth_first_traversal(self):
         stack = collections.deque(self.roots)
