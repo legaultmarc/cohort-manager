@@ -8,6 +8,34 @@ codes:
     - name: &codeAFib AtrialFibrillationType
       code: [[1, Paroxysmal], [2, Persistent], [3, Permanent], [4, Unknown]]
 
+    - name: &oneTwoThreeMore oneTwoThreeMore
+      code: [[1, "One"], [2, "Two"], [3, "Three or more"]]
+
+    - name: &ANGCHFclass ANGCHFclass
+      code: [[1, "Class I"], [2, "Class II"], [3, "Class III"],
+             [4, "Class IV"]]
+
+    - name: &codeRaynauds RaynaudsType
+      code: [[1, "Primary"], [2, "Secondary"]]
+
+    - name: &codeDysl codeDysl
+      code: [[1, "Class I"],  [3, "Class IIa"], [4, "Class IIb"],
+             [5, "Class III"], [6, "Class IV"],   [7, "Class V"]]
+
+# Merge multiple discrete phenotypes into a single factor variable.
+recodeAsFactors:
+    - name: Ethnicity
+      delete: True
+      phenotypes: [EthCaucasian, EthHispanic, EthBlack, EthAsian,
+                   EthNatAmer, EthOther]
+
+# virtuals:
+#     - name: DiabetesType1
+#       type: discrete
+#       parent: DiabetesAny
+#       icd10: "E10"
+#       formula: "(v('DiabetesAny') == 1) & (v('DiabetesType') == 'Type 1')"
+
 data:
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/Arrythmia.txt"
       engine: "read_csv"
@@ -48,7 +76,7 @@ data:
           parent: Fainting
           name: FaintingAge
           type: continuous
-          map: &defaultContinuous [[-9, "nan"], [0, "nan"]]
+          map: &positiveInteger [[-9, "nan"], [0, "nan"]]
           crf_page: 16
           question: "Age at first episode (lifetime)"
 
@@ -71,7 +99,7 @@ data:
           name: AgeAtFirstArrhythmia
           parent: *arrh
           type: continuous
-          map: *defaultContinuous
+          map: *positiveInteger
           crf_page: 17
           question: "Arrhythmia: Age at first episode (years old)"
 
@@ -79,7 +107,7 @@ data:
           name: YearOfLastArrhymia
           parent: *arrh
           type: continuous
-          map: *defaultContinuous
+          map: *positiveInteger
           crf_page: 17
           question: "Arrhythmia: Year of most recent episode"
 
@@ -104,7 +132,7 @@ data:
           name: YearOfLastAtrialFibrillation
           parent: *afib
           type: continuous
-          map: *defaultContinuous
+          map: *positiveInteger
           crf_page: 17
           question: "AFib: Year of last documented episode"
 
@@ -211,7 +239,7 @@ data:
           name: PacemakerYear
           parent: Pacemaker
           type: continuous
-          map: *defaultContinuous
+          map: *positiveInteger
           crf_page: 18
           question: "Treatment: Multiple choice - Pacemaker Year"
 
@@ -227,7 +255,7 @@ data:
           name: ImplCardiovertorDefib
           parent: ImplantableCardiovertorDefibrillator
           type: continuous
-          map: *defaultContinuous
+          map: *positiveInteger
           crf_page: 18
           question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator Year"
 
@@ -239,6 +267,575 @@ data:
 
       variables:
         - column: Weight
-          name: &weight Weight
+          name: Weight
+          map: &realNA [[-99, "nan"], [-88, "nan"], [-77, "nan"]]
+          type: continuous
+          # unit: "kg"
+
+        - column: Height
+          name: Height
           map: [[-99, "nan"], [-88, "nan"], [-77, "nan"]]
           type: continuous
+          # unit: "m"
+
+        - column: WaistGirth
+          name: WaistGirth
+          map: *realNA
+          type: continuous
+          # unit: "cm"
+
+        - column: HipGirth
+          name: HipGirth
+          map: *realNA
+          type: continuous
+          # unit: "cm"
+
+        - column: BPSystolic
+          name: BloodPressureSystolic
+          map: *positiveInteger
+          type: continuous
+
+        - column: BPDiastolic
+          name: BloodPressureDiastolic
+          map: *positiveInteger
+          type: continuous
+
+        - column: HeartRate
+          name: HeartRate
+          map: *positiveInteger
+          type: continuous
+
+    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/COHORTE.txt"
+      engine: "read_csv"
+      sep: ";"
+      header: 0
+      index: ProjectId
+
+      variables:
+          # - column: EnrollDate
+          - column: EnrollAge
+            name: EnrollAge
+            map: *positiveInteger
+            question: "Subject age at enroll date"
+            type: continuous
+
+          - column: CurrentAge
+            name: CurrentAge
+            map: *positiveInteger
+            question: "Subject age at date of data extraction"
+            type: continuous
+
+          - column: Gender
+            name: Male
+            type: discrete
+            map: [[2, 0], [-9, "nan"]]  # 1 is male in dictionary
+
+          # Ethnicity (will be merged as 1 factor)
+          - column: EthCaucasian
+            name: EthCaucasian
+            emptyAreControls: True  # Instead of NaNs, empty fields are coded as 0
+            map: [[1, 1]]
+            type: discrete
+
+          - column: EthHispanic
+            name: EthHispanic
+            emptyAreControls: True
+            map: [[2, 1]]
+            type: discrete
+
+          - column: EthBlack
+            name: EthBlack
+            emptyAreControls: True
+            map: [[3, 1]]
+            type: discrete
+
+          - column: EthAsian
+            name: EthAsian
+            emptyAreControls: True
+            map: [[4, 1]]
+            type: discrete
+
+          - column: EthNatAmer
+            name: EthNatAmer
+            emptyAreControls: True
+            map: [[5, 1]]
+            type: discrete
+
+          - column: EthOther
+            name: EthOther
+            emptyAreControls: True
+            map: [[6, 1], [-88, "nan"]]
+            type: discrete
+
+          - column: AncestryFrCanadian
+            name: AncestryFrenchCanadian
+            map: [[-88, "nan"], [-77, "nan"], [-99, "nan"]]
+            question: "Ancestry: French canadian"
+            type: discrete
+
+          - column: ConsentProject
+            name: ContactForProjectConsent
+            question: "Consent: Contact for project"
+            type: discrete
+
+    - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/CVHx.txt"
+      engine: "read_csv"
+      sep: ";"
+      header: 0
+      index: ProjectId
+
+      variables:
+          # MI
+          - column: PrevMI
+            name: &previousMI PreviousMyocardialInfarction
+            question: "Previous MI"
+            type: discrete
+            map: *yesNoNa
+
+          - column: PrevMINbr
+            name: NumberOfPreviousMI
+            parent: *previousMI
+            question: "Previous MI: Number of MIs"
+            code: *oneTwoThreeMore
+            type: factor
+
+          - column: PrevMIAge
+            name: AgeAtFirstMI
+            parent: *previousMI
+            question: "Previous MI: Age at first MI"
+            map: *positiveInteger
+            type: continuous
+
+          - column: PrevMIYear
+            name: YearOfLastMI
+            parent: *previousMI
+            question: "Previous MI: Year of last MI"
+            map: *positiveInteger
+            type: continuous
+
+          # PCI
+          - column: PrevPCI
+            name: &previousPCI PreviousPCI
+            question: "Angioplastie coronarienne transluminale percutanée"
+            type: discrete
+            map: *yesNoNa
+
+          - column: PrevPCINbr
+            name: NumberOfPreviousPCI
+            parent: *previousPCI
+            question: "Previous PCI: Number of PCIs"
+            code: *oneTwoThreeMore
+            type: factor
+
+          - column: PrevPCIAge
+            name: AgeAtFirstPCI
+            parent: *previousPCI
+            question: "Previous PCI: Age at first PCI"
+            map: *positiveInteger
+            type: continuous
+
+          - column: PrevPCIYear
+            name: YearOfLastPCI
+            parent: *previousPCI
+            question: "Previous PCI: Year of last PCI"
+            map: *positiveInteger
+            type: continuous
+
+          # Angina
+          - column: Angina
+            name: AnginaHistory
+            question: "Angina lifetime"
+            type: discrete
+            map: *yesNoNa
+
+          - column: AnginaPresent
+            name: &anginaPresent AnginaPresent
+            question: "Angina present"
+            type: discrete
+
+          - column: AnginaClass
+            name: AnginaClass
+            parent: *anginaPresent
+            question: "Angina class"
+            map: [[9, "nan"]]
+            code: ANGCHFclass
+            type: factor
+
+          - column: AnginaUnstable
+            name: AnginaUnstable
+            map: *yesNoNa
+            type: discrete
+            question: "Angina unstable"
+
+          # Stroke
+          - column: StrokeTIA
+            name: &strokeTIA StrokeTIA
+            question: "Stroke or transient ischemic accident" # FIXME verify
+            map: *yesNoNa
+            type: discrete
+
+          - column: StrokeNbr
+            name: StrokeNumber
+            parent: *strokeTIA
+            code: *oneTwoThreeMore
+            type: factor
+            question: "Stroke/TIA: Number of strokes/TIA"
+
+          - column: StrokeAge
+            parent: *strokeTIA
+            name: StrokeFirstAge
+            type: continuous
+            map: *positiveInteger
+            question: "Stroke/TIA: Age at first stroke"
+
+          - column: StrokeYear
+            name: StrokeLastYear
+            parent: *strokeTIA
+            type: continuous
+            map: *positiveInteger
+            question: "Stroke/TIA: Year of last stroke/TIA"
+
+          # CHF
+          - column: CHF
+            name: &chf CongestiveHeartFailureHistory
+            type: discrete
+            map: *yesNoNa
+            question: "Congestive heart failure (CHF)"
+
+          - column: CHFCurrent
+            name: &CHFCurrent CHFCurrent
+            parent: *chf
+            type: discrete
+            map: *yesNoNa
+            question: "CHF: Current"
+
+          - column: CHFClass
+            name: CHFClass
+            parent: *CHFCurrent
+            map: [[9, "nan"]]
+            type: factor
+            code: *ANGCHFclass
+
+          # PVD (Peripheral Vascular Disease)
+          - column: PVD
+            name: &PVD PeripheralVascularDisease
+            type: discrete
+            map: *yesNoNa
+            icd10: "I73"
+
+          - column: PVDCarotids
+            parent: *PVD
+            name: PVDCarotids
+            map: [[1, 1]]
+            type: discrete
+
+          - column: PVDLowerLimbs
+            parent: *PVD
+            name: PVDLowerLimbs
+            map: [[2, 1]]
+            type: discrete
+
+          - column: PVDClaudication
+            parent: *PVD
+            name: PVDClaudication
+            icd10: "I73.9"
+            map: [[3, 1]]
+            type: discrete
+
+          - column: PVDDeepVein
+            parent: *PVD
+            name: PVDDeepVein
+            map: [[4, 1]]
+            type: discrete
+
+          - column: PVDRaynauds
+            parent: *PVD
+            name: &PVDRaynauds PVDRaynauds
+            map: [[5, 1]]
+            icd10: "I73.0"
+            type: discrete
+
+          - column: PVDRaynaudsType
+            name: PVDRaynaudsType
+            parent: *PVDRaynauds
+            type: factor
+            map: [[3, "nan"]]
+            code: *codeRaynauds
+
+          - column: PVDDilatation
+            parent: *PVD
+            name: PVDDilatation
+            type: discrete
+            map: [[6, 1]]
+
+          # Hypertension
+          - column: Hyper
+            name: &hyper Hypertension
+            map: *yesNoNa
+            type: discrete
+            icd10: "I10"
+            crf_page: 12
+
+          - column: HyperTreated
+            name: HypertensionTreated
+            parent: *hyper
+            type: discrete
+            map: [[2, 0], [1, 1], [9, "nan"]]
+
+          - column: HyperControlled
+            name: HypertensionIsControlled
+            parent: *hyper
+            type: discrete
+            # There is no was of knowing what 3 represents...
+            map: [[2, 0], [3, "nan"], [9, "nan"]]
+
+          # Need to find a solution to HyperDuration because the unit could
+          # be different between samples...
+
+          # Diabetes
+          - column: Diab
+            name: &diab DiabetesAny
+            type: discrete
+            map: *yesNoNa
+
+          - column: DiabType
+            parent: *diab
+            name: DiabetesType1
+            type: discrete
+            map: [[2, "nan"]]
+
+          - column: DiabType
+            parent: *diab
+            name: DiabetesType2
+            type: discrete
+            map: [[1, "nan"], [2, 1]]
+
+          - column: DiabAgents
+            parent: *diab
+            name: &diabAgents DiabetesAgents
+            type: discrete
+
+          - column: DiabInsulin
+            parent: *diabAgents
+            name: InsulinUser
+            type: discrete
+            map: [[2, 1]]
+
+          - column: DiabDiet
+            parent: *diabAgents
+            name: DietControlsDiabetes
+            type: discrete
+            map: [[3, 1]]
+
+          - column: DiabControlled
+            parent: *diab
+            name: DiabetesIsControlled
+            type: discrete
+            # There is no was of knowing what 3 represents...
+            map: [[2, 0], [3, "nan"], [9, "nan"]]
+
+          # Diabetes time has heterogeneous units...
+
+          # Dyslipidemia
+          - column: Dysl
+            name: &dys Dyslipidemia
+            map: *yesNoNa
+            crf_page: 13
+            type: discrete
+            icd10: "E78"
+
+          - column: DyslHyperChol
+            name: Hypercholesterolemia
+            parent: *dys
+            type: discrete
+            map: [[1, 1]]
+            icd10: "E78.0"
+
+          - column: DyslFamilial
+            name: FamilialHypercholesterolemia
+            parent: Hypercholesterolemia
+            type: discrete
+            map: *yesNoNa
+
+          - column: DyslHyperTrig
+            name: Hypertriglyceridemia
+            parent: *dys
+            type: discrete
+            map: [[2, 1]]
+            icd10: "E78.1"
+
+          - column: DyslTreated
+            name: DyslepidemiaTreated
+            parent: *dys
+            type: discrete
+            map: [[2, 0], [1, 1], [9, "nan"]]
+
+          - column: DyslControlled
+            name: DyslepidemiaControlled
+            parent: *dys
+            type: discrete
+            map: [[2, 0], [1, 1], [9, "nan"]]
+
+          # Dyslepidemia duration has heterogeneous units...
+
+          - column: DyslClass
+            name: DyslepidemiaClass
+            type: factor
+            code: *codeDysl
+            parent: *dys
+            map: [[9, "nan"]]
+
+          # Valve
+          - column: Valve
+            name: &valve ValvularDisease
+            type: discrete
+            map: *yesNoNa
+
+          - column: ValveAS
+            name: AorticStenosis
+            parent: *valve
+            type: discrete
+            icd10: "I06.0"
+
+          - column: ValveAB
+            name: BicuspidAorticValve
+            parent: *valve
+            type: discrete
+            map: [[2, 1]]
+            icd10: "Q23.1"
+
+          - column: ValveMR
+            name: MitralRegurgitation
+            parent: *valve
+            type: discrete
+            map: [[3, 1]]
+            icd10: "I05.1"
+
+          - column: ValveTD
+            name: TricuspidValveDisease
+            parent: *valve
+            type: discrete
+            map: [[4, 1]]
+            icd10: "I07.9"
+
+          - column: ValveAR
+            name: AorticRegurgitation
+            parent: *valve
+            type: discrete
+            map: [[5, 1]]
+            icd10: "I06.1"
+
+          - column: ValveMS
+            name: MitralStenosis
+            parent: *valve
+            type: discrete
+            map: [[6, 1]]
+            icd10: "I05.0"
+
+          - column: ValveBD
+            name: BarlowsDisease
+            parent: *valve
+            type: discrete
+            map: [[7, 1]]
+            icd10: "I34.1"
+
+          # Aorta
+          - column: Aorta
+            name: &aorta DiseaseOfTheAorta
+            crf_page: 14
+            type: discrete
+            map: *yesNoNa
+
+
+          - column: AortaTA
+            name: ThoracicAorticAneurysm
+            icd10: "I71.2"
+            type: discrete
+            parent: *aorta
+            map: [[1, 1]]
+
+          - column: AortaMS
+            name: MarfanSyndome
+            icd10: "Q87.4"
+            type: discrete
+            parent: *aorta
+            map: [[2, 1]]
+
+          - column: AortaAA
+            name: AbdominalAorticAneurysm
+            icd10: "I71.4"
+            type: discrete
+            parent: *aorta
+            map: [[3, 1]]
+
+          # Surgeries
+          - column: Surgeries
+            name: &surgeries CardiovascularSurgeries
+            type: discrete
+            map: *yesNoNa
+            crf_page: 14
+
+          - column: CABG
+            name: &cabg CoronaryArteryBypassGrafting
+            type: discrete
+            parent: *surgeries
+
+          - column: CABGNbr
+            name: NumberOfCABG
+            parent: *cabg
+            type: factor
+            code: *oneTwoThreeMore
+
+          - column: CABGAge
+            name: AgeAtFirstCABG
+            parent: *cabg
+            type: continuous
+            map: *positiveInteger
+
+          - column: CABGYear
+            name: YearOfLastCABG
+            parent: *cabg
+            type: continuous
+            map: *positiveInteger
+
+          - column: ValveReplace
+            name: &valveReplace ValveReplacementSurgery
+            parent: *surgeries
+            type: discrete
+            map: *yesNoNa
+
+          - column: ReplaceMI
+            name: ReplaceMitral
+            parent: *valveReplace
+            type: discrete
+            map: [[1, 1]]
+
+          - column: ReplaceTR
+            name: ReplaceTricuspid
+            parent: *valveReplace
+            type: discrete
+            map: [[2, 1]]
+
+          - column: ReplaceAO
+            name: ReplaceAortic
+            parent: *valveReplace
+            type: discrete
+            map: [[3, 1]]
+
+          - column: ReplacePU
+            name: ReplacePulmonary
+            parent: *valveReplace
+            type: discrete
+            map: [[4, 1]]
+
+          - column: ReplaceAge
+            name: AgeAtFirstReplacement
+            parent: *valveReplace
+            type: continuous
+            map: *positiveInteger
+
+          - column: ReplaceYear
+            name: YearOfLastReplacement
+            parent: *valveReplace
+            type: continuous
+            map: *positiveInteger

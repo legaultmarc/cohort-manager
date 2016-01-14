@@ -62,6 +62,20 @@ def parse_yaml(filename):
 
     manager.commit()
 
+    # If there is a recodeAsFactor operation (to merge multiple discrete
+    # variables to a single factor variable), it will be done here because
+    # the database has been filled.
+    recode_as_factors = config.get("recodeAsFactors", [])
+
+    for elem in recode_as_factors:
+        _handle_recode_as_factors(manager, elem)
+
+    # Create virtual variables.
+    virtuals = config.get("virtuals", [])
+
+    for elem in virtuals:
+        _handle_virtuals(manager, elem)
+
     return manager
 
 
@@ -95,6 +109,81 @@ def _handle_code_node(manager, code):
 
         manager.add_code(name, code[i][0], code[i][1])
 
+    manager.commit()
+
+
+def _handle_recode_as_factors(manager, node):
+    new_name = node.get("name")
+    if new_name is None:
+        raise InvalidConfig("recodeAsFactors mappings need a 'name' field.")
+
+    delete = node.get("delete", False)
+    if type(delete) is not bool:
+        raise InvalidConfig("recodeAsFactors mappings' delete field requires "
+                            "a bool.")
+
+    # list of phenotypes to merge.
+    phenotypes = node.get("phenotypes")
+    data = np.zeros(manager.n) - 1  # Initialize at -1.
+    for code_int, phenotype in enumerate(phenotypes):
+        # Check that it's a discrete variable.
+        meta = manager.get_phenotype(phenotype)
+        if meta["variable_type"] != "discrete":
+            raise InvalidConfig("The recodeAsFactor function is only valid to "
+                                "merge multiple discrete variables into a "
+                                "single factor.")
+
+        # Create the code.
+        code_name = "{}Code".format(new_name)
+        manager.add_code(code_name, code_int, phenotype)
+
+        # Encode the data.
+        data[manager.get_data(phenotype, numpy=True) == 1] = code_int
+
+    # The remaining values (still -1) will be missing (nan).
+    data[data == -1] = np.nan
+
+    # Create the new phenotype and add the data.
+    manager.add_phenotype(
+        name=new_name,
+        variable_type="factor",
+        code_name=code_name
+    )
+    manager.commit()
+
+    manager.add_data(new_name, data)
+
+    # Delete the sub-phenotypes if necessary.
+    if delete:
+        for phenotype in phenotypes:
+            manager.delete(phenotype)
+
+
+def _handle_virtuals(manager, node):
+    """Used to create virtual phenotypes at cohort creation.
+
+    .. todo::
+
+        This might become dead code.
+
+    """
+    name = node.pop("name", None)
+    if name is None:
+        raise InvalidConfig("No name provided for virtual variable.")
+
+    _type = node.pop("type", None)
+    if _type not in ("discrete", "continuous"):
+        raise InvalidConfig("Invalid or missing type for virtual variable.")
+
+    formula = node.pop("formula", None)
+    if formula is None:
+        raise InvalidConfig("Missing formula for virtual variable.")
+
+    data = eval(formula, {}, {"v": manager.variable})
+
+    # Create the new phenotype.
+    manager.add_phenotype(name=name, variable_type=_type, **node)
+    manager.add_data(name, data.data)
     manager.commit()
 
 
@@ -144,6 +233,7 @@ def _handle_variable_node(manager, node, data):
         raise InvalidConfig("Variable node has no 'column'.")
 
     # Parse the variable node attributes.
+    empty_are_controls = node.get("emptyAreControls", False)
     name = node.get("name", column)
     icd10 = node.get("icd10")
     parent = node.get("parent")
@@ -168,20 +258,38 @@ def _handle_variable_node(manager, node, data):
             "Could not extract data from column '{}'.".format(column)
         )
 
+    # The user can use emptyAreControls: True so that empty (normally missing)
+    # values are understood as controls.
+    if empty_are_controls:
+        data[np.isnan(data)] = 0
+
     # Apply mapper.
     if _map:
         for i, tu in enumerate(_map):
             if tu[1] == "nan":
                 _map[i][1] = np.nan
+
+            elif tu[0] == 0:
+                if empty_are_controls and _type == "discrete":
+                    logger.warning("When using emptyAreControls, remapping "
+                                   "controls (0) will also affect empty "
+                                   "fields.")
+
             # We always cast the target to float.
             else:
                 _map[i][1] = float(_map[i][1])
 
-        if _type in ("continuous", "discrete"):
-            data = vector_map(data, _map)
-        else:
-            raise TypeError("Can't map variables that are not 'discrete' or "
-                            "'continuous'.")
+        if _type == "factor":
+            # We can only add NaNs when remapping factors.
+            for tu in _map:
+                if not np.isnan(tu[1]):
+                    raise TypeError("Factor remapping only allows remapping "
+                                    "to NaN.")
+        elif _type not in ("continuous", "discrete"):
+            raise TypeError("Unknown variable type ('{}') in variable node."
+                            "".format(_type))
+
+        data = vector_map(data, _map)
 
     # Add the phenotype to the database.
     manager.add_phenotype(

@@ -276,6 +276,10 @@ def histogram(phenotype, nbins=None):
     There is an optional argument for the number of bins.
     """
     data, meta = _get_data_meta(phenotype)
+    if meta["variable_type"] not in ("continuous", "discrete"):
+        raise REPLException("Could not generate histogram for '{}' variable."
+                            "".format(meta["variable_type"]))
+
     data = data[~np.isnan(data)]
     if meta["variable_type"] == "continuous":
         # Histogram.

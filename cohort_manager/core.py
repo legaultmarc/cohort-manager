@@ -464,6 +464,23 @@ class CohortManager(object):
 
         return out
 
+    def filter_phenotypes(self, missing_greater=None, missing_lower=None,
+                          variable_type=None):
+        """Get a list of phenotypes corresponding to the selected criterion.
+
+        This method allows filtering of phenotypes with respect to:
+
+        - The rate of missing values
+        - The variable type
+
+        """
+        raise NotImplementedError()
+
+    def contingency(self, phenotype1, phenotype2):
+        """Build a contingency table for two discrete or factor phenotypes."""
+        raise NotImplementedError()
+
+
     def get_number_phenotypes(self):
         """Returns the number of phenotypes."""
         self.cur.execute("SELECT count(*) FROM phenotypes")
