@@ -37,6 +37,53 @@ recodeAsFactors:
 #       formula: "(v('DiabetesAny') == 1) & (v('DiabetesType') == 'Type 1')"
 
 data:
+    - filename: "/Users/legaultmarc/data/mhi_biobank/covariates/c1-c1_after_qc.csv"
+      engine: "read_csv"
+      sep: ","
+      header: 0
+      index: exm
+
+      variables:
+          - column: C1
+            name: C1
+            type: continuous
+
+          - column: C2
+            name: C2
+            type: continuous
+
+          - column: C3
+            name: C3
+            type: continuous
+
+          - column: C4
+            name: C4
+            type: continuous
+
+          - column: C5
+            name: C5
+            type: continuous
+
+          - column: C6
+            name: C6
+            type: continuous
+
+          - column: C7
+            name: C7
+            type: continuous
+
+          - column: C8
+            name: C8
+            type: continuous
+
+          - column: C9
+            name: C9
+            type: continuous
+
+          - column: C10
+            name: C10
+            type: continuous
+
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/Arrythmia.txt"
       engine: "read_csv"
       sep: ";"
@@ -839,3 +886,112 @@ data:
             parent: *valveReplace
             type: continuous
             map: *positiveInteger
+
+          - column: ValveRepair
+            name: &valveRepair ValveRepairSurgery
+            parent: *surgeries
+            type: discrete
+            map: *yesNoNa
+
+          - column: RepairMI
+            name: RepairMitral
+            parent: *valveRepair
+            type: discrete
+            map: [[1, 1]]
+
+          - column: RepairTR
+            name: RepairTricuspid
+            parent: *valveRepair
+            type: discrete
+            map: [[2, 1]]
+
+          - column: RepairAO
+            name: RepairAortic
+            parent: *valveRepair
+            type: discrete
+            map: [[3, 1]]
+
+          - column: RepairPU
+            name: RepairPulmonary
+            parent: *valveRepair
+            type: discrete
+            map: [[4, 1]]
+
+          - column: RepairAge
+            name: AgeAtFirstRepair
+            parent: *valveRepair
+            type: continuous
+            map: *positiveInteger
+
+          - column: RepairYear
+            name: YearOfLastRepair
+            parent: *valveRepair
+            type: continuous
+            map: *positiveInteger
+
+          - column: HeartTrans
+            parent: *surgeries
+            name: &heartTransplant HeartTransplant
+            type: discrete
+            map: *yesNoNa
+
+          - column: Ischemic
+            parent: *heartTransplant
+            name: TransplantIschemic
+            type: discrete
+            map: [[2, 1], [1, 0], [3, "nan"]]
+
+          - column: HeartTransYear
+            name: YearOfHeartTransplant
+            parent: *heartTransplant
+            type: continuous
+            map: *positiveInteger
+
+          - column: PeriSurg
+            name: &periSurg PeripheralCardiovascularSurgery
+            parent: *surgeries
+            type: discrete
+            map: &yesNo [[-99, "nan"], [-88, "nan"], [-77, "nan"]]
+
+          - column: PeriSurgEndar
+            name: Endarterectomy
+            parent: *periSurg
+            type: discrete
+
+          - column: EndarCA
+            name: EndarterectomyCarotid
+            parent: Endarterectomy
+            type: discrete
+            map: [[1, 1]]
+
+          - column: EndarFE
+            name: EndarterectomyFemoral
+            parent: Endarterectomy
+            type: discrete
+            map: [[2, 1]]
+
+          - column: EndarAO
+            name: EndarterectomyAorta
+            parent: Endarterectomy
+            type: discrete
+            map: [[3, 1]]
+
+          # Other peripheral card surgeries is free text.
+
+          - column: OtherSurgeries
+            name: OtherCardiacSurgeries
+            type: discrete
+            parent: *surgeries
+            map: *yesNo
+
+          - column: OtherDiseases
+            name: OtherCardiovascularDiseases
+            type: discrete
+            parent: *surgeries
+            map: *yesNo
+
+          # Ignoring the "Autre événement CV dans famille immédiates
+          # The details for other surgeries are hard to extract (free text)
+          # so I will do them later.
+
+

@@ -270,6 +270,25 @@ def boxplot(phenotype):
     plt.show()
 
 
+@command(args_types=(str, str))
+def scatter(y, x):
+    """Plot two continuous phenotypes in a scatterplot."""
+    datay, metay = _get_data_meta(y)
+    datax, metax = _get_data_meta(x)
+
+    if not (metax["variable_type"] == "continuous" and
+            metay["variable_type"] == "continuous"):
+        raise REPLException("Can only plot scatter for continuous variables.")
+
+    not_missing = ~ (np.isnan(datax) | np.isnan(datay))
+
+    plt.plot(datay[not_missing], datax[not_missing], ".", c="black", ms=2)
+    plt.xlabel(x)
+    plt.ylabel(y)
+    plt.show()
+
+
+
 @command(args_types=(str, int), optional=1)
 def histogram(phenotype, nbins=None):
     """Draw a histogram (or a bar plot for discrete variables) of the data.

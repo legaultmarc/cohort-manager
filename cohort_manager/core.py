@@ -56,7 +56,11 @@ class CohortDataError(Exception):
 class CohortManager(object):
     def __init__(self, name, path=None):
         self.name = name
-        self.path = path if path else os.path.abspath(name)
+        if path:
+            self.path = os.path.join(path, name)
+        else:
+            self.path = os.path.abspath(name)
+
         if not os.path.isdir(self.path):
             os.makedirs(self.path)
 
