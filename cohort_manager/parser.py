@@ -207,8 +207,10 @@ def _handle_file_node(manager, node):
 
     # Set the sample order. The order of samples is shared for all variables
     # in a file, so we don't need to check at the variable parsing level.
-    samples = np.array(manager.get_samples())
+    samples = manager.get_samples()
     if samples is not None:
+        samples = np.array(samples)
+
         # Check that sample ids are consistent.
         extra = set(data.index.values) - set(samples)
         if extra:
@@ -220,7 +222,7 @@ def _handle_file_node(manager, node):
         data = data.loc[samples, :]
         assert np.all(samples == data.index)
     else:
-        manager.set_samples(data.index.values.astype(str))
+        manager.set_samples(data.index.values.astype(np.string_))
 
     # Add information on all variables.
     for variable in node.get("variables", []):
@@ -330,11 +332,12 @@ def _csv_engine(filename, node):
         "Parsing CSV '{}'. sep={}, header={}.".format(filename, sep, header)
     )
     index = node.get("index")
+    encoding = node.get("encoding")
     if not index:
         raise InvalidConfig("An 'index' column is required. It should "
                             "be the sample id column.")
 
-    df = pd.read_csv(filename, sep=sep, header=header)
+    df = pd.read_csv(filename, sep=sep, header=header, encoding=encoding)
     df.set_index(index, verify_integrity=True, inplace=True, drop=True)
     df.index = df.index.astype(str)
 

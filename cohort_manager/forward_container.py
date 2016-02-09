@@ -6,7 +6,6 @@ container on top of the cohort manager.
 import shutil
 import unittest
 import logging
-logger = logging.getLogger(__name__)
 
 from forward.phenotype.db import PandasPhenotypeDatabase, apply_transformation
 from forward.utils import dispatch_methods
@@ -18,6 +17,9 @@ import scipy.stats
 from . import core
 
 
+logger = logging.getLogger(__name__)
+
+
 class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
     def __init__(self, name, path=None, **kwargs):
         self.manager = core.CohortManager(name, path)
@@ -26,7 +28,7 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
         self._order_is_set = False
         self.variables = None
 
-        self.index_map = None
+        self.permutation = None
         self.analyzed_outcomes = []
 
         dispatch_methods(self, kwargs)
@@ -67,7 +69,11 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
 
         try:
             meta = self.manager.get_phenotype(name)
-            data = self.manager.get_data(name, numpy=True)
+            # Reorder if needed.
+            if self.permutation is not None:
+                data = self.permutation.get_data(name)
+            else:
+                data = self.manager.get_data(name, numpy=True)
         except KeyError:
             raise ValueError("'{}' is not in the database.".format(name))
 
@@ -75,11 +81,6 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
             raise ValueError("Forward does not support the analysis of "
                              "factors (it can't represent them using it's "
                              "variable system).")
-
-        # Reorder if needed.
-        if self.index_map is not None:
-            data = data[self.index_map]
-
 
         if variable.variable_type == "continuous" and variable.transformation:
             data = apply_transformation(variable.transformation, data)
@@ -90,27 +91,15 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
         return self.manager.get_phenotypes_list()
 
     def get_sample_order(self):
-        if self.index_map is None:
+        if self.permutation is None:
             return list(self.manager_samples)
         else:
-            return list(self.manager_samples[self.index_map])
+            return list(self.permutation.samples)
 
     def set_sample_order(self, sequence, allow_subset=False):
-        set_sequence = set(sequence)
-        set_manager_samples = set(self.manager_samples)
-
-        extra = set_sequence - set_manager_samples
-        if extra:
-            raise ValueError("Phenotypes are unavailable for some of the "
-                             "requested samples (in the new order sequence).")
-
-        missing = set_manager_samples - set_sequence
-        if missing and not allow_subset:
-            raise ValueError("Not all phenotypes were included in the new "
-                             "sequence.")
-
-        idx = {sample: i for i, sample in enumerate(self.manager_samples)}
-        self.index_map = np.array([idx[i] for i in sequence])
+        self.permutation = core.Permutation(
+            self.manager, sequence, allow_subset
+        )
 
 
 # TESTS

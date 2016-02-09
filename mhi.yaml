@@ -38,6 +38,7 @@ recodeAsFactors:
 
 data:
     - filename: "/Users/legaultmarc/data/mhi_biobank/covariates/c1-c1_after_qc.csv"
+      encoding: "ISO-8859-1"
       engine: "read_csv"
       sep: ","
       header: 0
@@ -85,6 +86,7 @@ data:
             type: continuous
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/Arrythmia.txt"
+      encoding: "ISO-8859-1"
       engine: "read_csv"
       sep: ";"
       header: 0
@@ -307,6 +309,7 @@ data:
           question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator Year"
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/VS.txt"
+      encoding: "ISO-8859-1"
       engine: "read_csv"
       sep: ";"
       header: 0
@@ -353,6 +356,7 @@ data:
           type: continuous
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/COHORTE.txt"
+      encoding: "ISO-8859-1"
       engine: "read_csv"
       sep: ";"
       header: 0
@@ -426,6 +430,7 @@ data:
             type: discrete
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/CVHx.txt"
+      encoding: "ISO-8859-1"
       engine: "read_csv"
       sep: ";"
       header: 0

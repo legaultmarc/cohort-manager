@@ -288,7 +288,6 @@ def scatter(y, x):
     plt.show()
 
 
-
 @command(args_types=(str, int), optional=1)
 def histogram(phenotype, nbins=None):
     """Draw a histogram (or a bar plot for discrete variables) of the data.

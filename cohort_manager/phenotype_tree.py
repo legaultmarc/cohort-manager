@@ -63,7 +63,7 @@ class PhenotypeTree(object):
         s = s.getvalue().rstrip()
         if pager:
             proc = subprocess.Popen(["less"], stdin=subprocess.PIPE)
-            proc.communicate(input=s)
+            proc.communicate(input=s.encode("utf-8"))
         else:
             print(s)
 

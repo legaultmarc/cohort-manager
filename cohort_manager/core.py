@@ -4,6 +4,7 @@
 from __future__ import division
 
 import collections
+import itertools
 import logging
 import sqlite3
 import atexit
@@ -12,7 +13,6 @@ import os
 
 import six
 import h5py
-import scipy.stats
 import numpy as np
 import pandas as pd
 from six.moves import range
@@ -53,6 +53,44 @@ class CohortDataError(Exception):
         return self.value
 
 
+class Permutation(object):
+    """Utility class to define an arbitrary sample order for data access."""
+    def __init__(self, manager, samples_list, allow_subset=False):
+        self._manager = manager
+        self.samples = samples_list
+        self.allow_subset = allow_subset
+
+        self.index_map = self._build_index_map()
+
+    def get_data(self, phenotype):
+        data = self._manager.get_data(phenotype, numpy=True)
+        return data[self.index_map]
+
+    def _build_index_map(self):
+        set_samples = set(self.samples)
+        set_manager_samples = set(self._manager.get_samples())
+
+        extra = set_samples - set_manager_samples
+        if extra:
+            raise ValueError(
+                "Phenotypes are unavailable for {} of the requested samples "
+                "(in the new order sequence).".format(len(extra))
+            )
+
+        missing = set_manager_samples - set_samples
+        message = ("Phenotypes for {} samples were discarded in the "
+                   "permutation.".format(len(missing)))
+        if missing and not self.allow_subset:
+            raise ValueError(message)
+        elif missing:
+            logger.info(message)
+
+        manager_indices = {
+            sample: i for i, sample in enumerate(self._manager.get_samples())
+        }
+        return np.array([manager_indices[i] for i in self.samples])
+
+
 class CohortManager(object):
     def __init__(self, name, path=None):
         self.name = name
@@ -63,6 +101,9 @@ class CohortManager(object):
 
         if not os.path.isdir(self.path):
             os.makedirs(self.path)
+
+        # We use caching to save expensive decodes.
+        self._cache = {"samples": None}
 
         self._discover_install()
         self.tree = None  # This is built when the manager is commited.
@@ -284,15 +325,19 @@ class CohortManager(object):
 
     def set_samples(self, samples):
         """Set the samples IDs and order."""
-        if samples:
+        if type(samples) is np.ndarray:
+            assert np.issubdtype(samples.dtype, np.string_)
+        else:
             assert isinstance(samples[0], six.string_types), (
                 "Sample IDs need to be strings."
             )
+            samples = np.array(samples, dtype=np.string_)
 
         if self["frozen"] == "yes":
             raise FrozenCohortError()
 
         self.data.create_dataset("samples", data=samples)
+        self._cache["samples"] = samples.astype(str)
         self["frozen"] = "yes"
 
     def add_data(self, phenotype, values):
@@ -450,8 +495,15 @@ class CohortManager(object):
     # Get information.
     def get_samples(self):
         """Get the ordered samples."""
+        cached_samples = self._cache.get("samples")
+        if cached_samples is not None:
+            return cached_samples
+
         try:
-            return self.data["samples"]
+            self._cache["samples"] = np.array(
+                [i.decode("utf-8") for i in self.data["samples"]]
+            )
+            return self._cache["samples"]
         except KeyError:
             return None
 
@@ -482,8 +534,56 @@ class CohortManager(object):
 
     def contingency(self, phenotype1, phenotype2):
         """Build a contingency table for two discrete or factor phenotypes."""
-        raise NotImplementedError()
+        # Build an (m+1) x (n+1) matrix of counts and marginals.
+        # m = n = 3 (missing, affected, unaffected) for discrete variables.
+        meta1 = self.get_phenotype(phenotype1)
+        meta2 = self.get_phenotype(phenotype2)
+        dims = [0, 0]
+        states = []
+        labels = []
+        for i, meta in enumerate((meta1, meta2)):
+            if meta["variable_type"] == "discrete":
+                dims[i] = 3  # NaN, 0, 1
+                states.append([0, 1])
+                labels.append(["missing", "control", "case"])
+            elif meta["variable_type"] == "factor":
+                code = self.get_code(meta["code_name"])
+                dims[i] = len(code) + 1
+                states.append([j[0] for j in code])
+                labels.append(["missing"] + [j[1] for j in code])
+            else:
+                raise ValueError(
+                    "Phenotype '{}' is not discrete or factor.".format(
+                        meta["name"]
+                    )
+                )
+        m, n = dims
 
+        for i, phenotype in enumerate((phenotype1, phenotype2)):
+            labels[i] = list(["".join(j) for j in zip(
+                itertools.repeat("{} - ".format(phenotype)),
+                labels[i]
+            )])
+
+        v1 = np.array(self.get_data(phenotype1, numpy=False))
+        v2 = np.array(self.get_data(phenotype2, numpy=False))
+
+        counts = np.zeros((m, n)).astype(int) - 1
+        counts[0, 0] = np.sum(np.isnan(v1) & np.isnan(v2))
+        for i in range(m - 1):
+            counts[i+1, 0] = np.sum(np.isnan(v2) & (v1 == states[0][i]))
+
+            for j in range(n - 1):
+                if i == 0:
+                    counts[0, j+1] = np.sum(
+                        np.isnan(v1) & (v2 == states[1][j])
+                    )
+                counts[i + 1, j + 1] = np.sum(
+                    (v1 == states[0][i]) &
+                    (v2 == states[1][j])
+                )
+
+        return pd.DataFrame(counts, index=labels[0], columns=labels[1])
 
     def get_number_phenotypes(self):
         """Returns the number of phenotypes."""
@@ -499,7 +599,11 @@ class CohortManager(object):
         return li
 
     def get_code(self, name):
-        """Get the integer mappings for a given code."""
+        """Get the integer mappings for a given code.
+
+        TODO. This is inconsistent with get_phenotype which returns a dict.
+
+        """
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
         return self.cur.fetchall()
 
