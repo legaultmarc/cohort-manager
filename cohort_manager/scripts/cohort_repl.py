@@ -436,7 +436,7 @@ def delete(phenotype):
     manager.delete(phenotype)
 
 
-if __name__ == "__main__":
+def entry_point():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--disable-pager", action="store_false")
@@ -445,3 +445,7 @@ if __name__ == "__main__":
     STATE["DEBUG"] = args.debug
     STATE["PAGER"] = args.disable_pager
     main()
+
+
+if __name__ == "__main__":
+    entry_point()
