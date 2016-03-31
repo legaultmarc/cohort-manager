@@ -8,24 +8,28 @@ ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_20/
 
 """
 
-from __future__ import division
+from __future__ import division, print_function
 
 import functools
 import base64
 import os
-import re
 import logging
+import functools
+import multiprocessing
 
 import psycopg2
 import Levenshtein  # pip install python-Levenshtein
 import numpy as np
 
 
+from .tokens import tokenize, Token, longest_name
+
+
 logger = logging.getLogger(__name__)
 
 
 DB_HOST = os.environ.get("DB_CHEMBL_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", 5432)
+DB_PORT = os.environ.get("DB_CHEMBL_PORT", 5432)
 DB_NAME = os.environ.get("DB_CHEMBL_NAME")
 DB_USERNAME = os.environ.get("DB_CHEMBL_USERNAME")
 DB_PASSWORD = os.environ.get("DB_CHEMBL_PASSWORD")
@@ -33,7 +37,7 @@ if not DB_PASSWORD:
     try:
         DB_PASSWORD = base64.b64decode(
             os.environ.get("DB_CHEMBL_B64_PASSWORD")
-        )
+        ).decode("utf-8")
     except TypeError:
         pass
 
@@ -48,16 +52,20 @@ class Drug(object):
         with ChEMBL() as db:
             self.data = db.execute("SELECT * FROM molecule_dictionary WHERE "
                                    "molregno=%s", (molregno, ))
-
-        print self.data
+        print(self.data)
 
 
 class ChEMBL(object):
     def __init__(self):
-        self.con = psycopg2.connect(database=DB_NAME, user=DB_USERNAME,
-                                    password=DB_PASSWORD, host=DB_HOST,
-                                    port=DB_PORT)
+        self._get_con = functools.partial(
+            psycopg2.connect, database=DB_NAME, user=DB_USERNAME,
+            password=DB_PASSWORD, host=DB_HOST, port=DB_PORT
+        )
+
+        self.con = self._get_con()
         self.cur = self.con.cursor()
+        self._cache = {}
+
 
     def close(self):
         self.con.close()
@@ -75,63 +83,29 @@ class ChEMBL(object):
         self.cur.execute(sql, params)
         return self.cur.fetchall()
 
-    def compound_search(self, s):
-        """Search for a compound using the ChEMBL known synonyms."""
+    def search_compounds(self, li):
+        """Query ChEMBL for a list of compounds."""
 
-        # Remove non alphanumeric characters from search string.
-        s = re.sub(r"([^\s\w])+", "", s.upper())
+        n_cpus = multiprocessing.cpu_count() - 1
+        pool = multiprocessing.Pool(n_cpus)
 
-        # Try for an exact match in preferred names.
-        preferred_match = self._compound_match_preferred_name(s, fuzzy=False)
-        unique_ids = {i[0] for i in preferred_match}
-        if len(unique_ids) == 1:
-            return Drug(unique_ids.pop())
-        elif len(unique_ids) > 1:
-            logger.warning(
-                "{} possible matches (using preferred names).".format(
-                    len(unique_ids)
-                )
-            )
-            max_idx, max_score = ChEMBL._jaro(
-                s, [i[1] for i in preferred_match]
-            )
-            if max_score > _SIMILARITY_THRESHOLD:
-                return Drug(preferred_match[max_idx][0])
+        tokens = [tokenize(s) for s in li]
+        longest_names = [longest_name(i) for i in tokens if i is not None]
+        longest_names = list({i.value for i in longest_names if i is not None})
 
-        # Try for an exact match in synonyms or a partial match in synonyms.
-        fuzzy = False
-        synonyms = self._compound_match_synonym(s, fuzzy)
-        unique_ids = {i[0] for i in synonyms}
-        if len(synonyms) < 1:
-            fuzzy = True
-            synonyms = self._compound_match_synonym(s, fuzzy)
-            unique_ids = {i[0] for i in synonyms}
+        # Batch query ChEMBL.
+        matchers = [
+            self._compound_match_preferred_name,
+            functools.partial(self._compound_match_preferred_name, fuzzy=True),
+            self._compound_match_synonym,
+            functools.partial(self._compound_match_synonym, fuzzy=True),
+        ]
 
-        if len(synonyms) < 1:
-            logger.warning("Could not find drug: '{}'.".format(s))
-            return
+        matches = []
+        for f in matchers:
+            matches.extend(zip(longest_names, pool.map(f, longest_names)))
 
-        if len(unique_ids) == 1:
-            return Drug(unique_ids.pop())
-        else:
-            logger.warning(
-                "{} possible matches for '{}' (fuzzy={}).".format(
-                    len(unique_ids), s, fuzzy
-                )
-            )
-            max_idx, max_score = ChEMBL._jaro(
-                s, [i[1] for i in synonyms]
-            )
-            if max_score > _SIMILARITY_THRESHOLD:
-                return Drug(synonyms[max_idx][0])
-
-            logger.warning(
-                "Could not find drug: '{}' (best match's jaro is under the "
-                "minimum threshold: {:.3f}<{:.3f})".format(
-                    s, max_score, _SIMILARITY_THRESHOLD
-                )
-            )
-            return
+        return matches
 
     @staticmethod
     def _jaro(s, li):
@@ -139,44 +113,51 @@ class ChEMBL(object):
         with s.
 
         """
-        scores = map(functools.partial(Levenshtein.jaro, s), li)
+        scores = list(map(functools.partial(Levenshtein.jaro, s), li))
         max_idx = np.argmax(scores)
         return max_idx, scores[max_idx]
 
     def _compound_match_synonym(self, s, fuzzy=False):
         """Match a compound by synonym name.
 
-        Returns tuples of molregno, synonyms, syn_type.
+        Returns a tuple of molregno, synonyms, syn_type.
 
         """
         sql = ("SELECT molregno, synonyms, syn_type FROM MOLECULE_SYNONYMS "
                "WHERE syn_type IN {} "
                "AND UPPER(SYNONYMS)".format(_SYNONYM_SOURCES))
 
+        s = s.upper()
         if fuzzy:
-            sql += " LIKE '%{}%'".format(s)
-            self.cur.execute(sql)
+            sql += " LIKE %s"
+            args = ("%{}%".format(s), )
         else:
             sql += "=%s"
-            self.cur.execute(sql, (s,))
+            args = (s, )
 
-        return self.cur.fetchall()
+        with self._get_con() as con:
+            with con.cursor() as cur:
+                cur.execute(sql, args)
+                return cur.fetchall()
 
     def _compound_match_preferred_name(self, s, fuzzy=False):
         """Match a compound by preferred name.
 
-        Returns tuples of molregno, pref_name
+        Returns a tuple of molregno, pref_name
 
         """
         sql = ("SELECT molregno, pref_name FROM molecule_dictionary WHERE "
                "UPPER(pref_name)")
 
+        s = s.upper()
         if fuzzy:
-            sql += " LIKE '%{}%'".format(s)
-            params = tuple()
+            sql += " LIKE %s"
+            args = ("%{}%".format(s), )
         else:
             sql += "=%s"
-            params = (s, )
+            args = (s, )
 
-        self.cur.execute(sql, params)
-        return self.cur.fetchall()
+        with self._get_con() as con:
+            with con.cursor() as cur:
+                cur.execute(sql, args)
+                return cur.fetchall()

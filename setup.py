@@ -10,6 +10,7 @@ import os
 import functools
 
 from setuptools import setup, find_packages
+from distutils.core import Extension
 
 
 MAJOR = 0
@@ -32,6 +33,14 @@ def write_version_file(fn=None):
         a.write(content.format(version=VERSION))
     finally:
         a.close()
+
+
+def drug_search_extension():
+    extension_info = {
+        "sources": ["cohort_manager/src/query.cpp",
+                    "cohort_manager/src/py_drugsearch.cpp"],
+    }
+    return Extension("cohort_manager.c_drug_search", **extension_info)
 
 
 def setup_package():
@@ -64,10 +73,14 @@ def setup_package():
                      "Programming Language :: Python :: 2.7",
                      "Programming Language :: Python :: 3",
                      "Topic :: Scientific/Engineering :: Bio-Informatics"],
-        test_suite="forward.tests.test_suite",
+        test_suite="cohort_manager.tests.test_suite",
         keywords="bioinformatics genomics phewas epidemiology cohort",
-        install_requires=["numpy >= 1.8.1", "pandas >= 0.15", "h5py >= 2.5"],
-        zip_safe=False
+        install_requires=["numpy >= 1.8.1", "pandas >= 0.15", "h5py >= 2.5",
+                          "six >= 1.10", "Unidecode >= 0.4.17"],
+        zip_safe=False,
+        ext_modules=[
+            drug_search_extension(),
+        ]
     )
 
 
