@@ -40,7 +40,7 @@ def drug_search_extension():
         "sources": ["cohort_manager/src/query.cpp",
                     "cohort_manager/src/py_drugsearch.cpp"],
     }
-    return Extension("cohort_manager.c_drug_search", **extension_info)
+    return Extension("cohort_manager.drugs.c_drug_search", **extension_info)
 
 
 def setup_package():

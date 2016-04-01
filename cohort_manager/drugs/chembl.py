@@ -18,11 +18,7 @@ import functools
 import multiprocessing
 
 import psycopg2
-import Levenshtein  # pip install python-Levenshtein
 import numpy as np
-
-
-from .tokens import tokenize, Token, longest_name
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +39,6 @@ if not DB_PASSWORD:
 
 # Data sources used for synonym search.
 _SYNONYM_SOURCES = ("USAN", "USP", "FDA", "TRADE_NAME")
-_SIMILARITY_THRESHOLD = 0.7
 
 
 class Drug(object):
@@ -83,81 +78,20 @@ class ChEMBL(object):
         self.cur.execute(sql, params)
         return self.cur.fetchall()
 
-    def search_compounds(self, li):
-        """Query ChEMBL for a list of compounds."""
+    def get_all_drugs(self):
+        """Get a list of relevant drug names from ChEMBL.
 
-        n_cpus = multiprocessing.cpu_count() - 1
-        pool = multiprocessing.Pool(n_cpus)
+        :returns: A list of tuple (molregno, drug_name)
+        :rtype: list
 
-        tokens = [tokenize(s) for s in li]
-        longest_names = [longest_name(i) for i in tokens if i is not None]
-        longest_names = list({i.value for i in longest_names if i is not None})
-
-        # Batch query ChEMBL.
-        matchers = [
-            self._compound_match_preferred_name,
-            functools.partial(self._compound_match_preferred_name, fuzzy=True),
-            self._compound_match_synonym,
-            functools.partial(self._compound_match_synonym, fuzzy=True),
-        ]
-
-        matches = []
-        for f in matchers:
-            matches.extend(zip(longest_names, pool.map(f, longest_names)))
-
-        return matches
-
-    @staticmethod
-    def _jaro(s, li):
-        """Return the index in li of the word with the largest Jaro similarity
-        with s.
+        This uses both the preferred names and the synonyms.
 
         """
-        scores = list(map(functools.partial(Levenshtein.jaro, s), li))
-        max_idx = np.argmax(scores)
-        return max_idx, scores[max_idx]
+        drugs = self.execute("SELECT molregno, UPPER(pref_name) FROM "
+                             "molecule_dictionary WHERE pref_name IS NOT NULL")
 
-    def _compound_match_synonym(self, s, fuzzy=False):
-        """Match a compound by synonym name.
+        sql = ("SELECT molregno, UPPER(synonyms), syn_type "
+               "FROM molecule_synonyms "
+               "WHERE syn_type IN {}").format(_SYNONYM_SOURCES)
 
-        Returns a tuple of molregno, synonyms, syn_type.
-
-        """
-        sql = ("SELECT molregno, synonyms, syn_type FROM MOLECULE_SYNONYMS "
-               "WHERE syn_type IN {} "
-               "AND UPPER(SYNONYMS)".format(_SYNONYM_SOURCES))
-
-        s = s.upper()
-        if fuzzy:
-            sql += " LIKE %s"
-            args = ("%{}%".format(s), )
-        else:
-            sql += "=%s"
-            args = (s, )
-
-        with self._get_con() as con:
-            with con.cursor() as cur:
-                cur.execute(sql, args)
-                return cur.fetchall()
-
-    def _compound_match_preferred_name(self, s, fuzzy=False):
-        """Match a compound by preferred name.
-
-        Returns a tuple of molregno, pref_name
-
-        """
-        sql = ("SELECT molregno, pref_name FROM molecule_dictionary WHERE "
-               "UPPER(pref_name)")
-
-        s = s.upper()
-        if fuzzy:
-            sql += " LIKE %s"
-            args = ("%{}%".format(s), )
-        else:
-            sql += "=%s"
-            args = (s, )
-
-        with self._get_con() as con:
-            with con.cursor() as cur:
-                cur.execute(sql, args)
-                return cur.fetchall()
+        return list(set(drugs) | {(i[0], i[1]) for i in self.execute(sql)})
