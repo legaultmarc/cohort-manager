@@ -19,6 +19,7 @@ from six.moves import range
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import stats
+from .drugs.chembl import ChEMBL
 
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,14 @@ class CohortManager(object):
             ");"
         )
 
+        self.cur.execute(
+            "CREATE TABLE drug_users ("
+            " drug_id TEXT,"
+            " sample_id TEXT,"
+            " CONSTRAINT drug_users_pk PRIMARY KEY (drug_id, sample_id)"
+            ");"
+        )
+
         self.con.commit()
 
     def _hdf5_init(self):
@@ -271,6 +280,12 @@ class CohortManager(object):
         self.cur.execute(
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
+        )
+
+    def register_drug_user(self, drug_id, sample):
+        """Register that 'sample' is a user of drug 'drug_id'"""
+        self.cur.execute(
+            "INSERT INTO drug_users VALUES (?, ?)", (str(drug_id), sample)
         )
 
     def update_phenotype(self, name, **kwargs):
@@ -519,6 +534,39 @@ class CohortManager(object):
         out = dict(zip(PHENOTYPE_COLUMNS, out))
 
         return out
+
+    def get_drug_users(self, drug_id, as_bool=False):
+        """Return a boolean vector similar to a phenotype vector where 1
+        represents drug users.
+
+        """
+        samples = self.get_samples()
+        v = np.zeros(len(samples), dtype=bool)
+        self.cur.execute(
+            "SELECT sample_id FROM drug_users WHERE drug_id=?", (drug_id, )
+        )
+        for sample in self.cur:
+            # Get the index.
+            v[(samples == sample)] = True
+
+        if not as_bool:
+            v = v.astype(float)
+
+        return v
+
+    def get_drug_users_atc(self, atc_code):
+        """Returns a vector of drug users for drugs corresponding to an ATC
+        code.
+
+        """
+        with ChEMBL() as db:
+            drug_ids = db.get_drugs_with_atc(atc_code)
+
+        v = np.zeros(self.n, dtype=bool)
+        for drug_id in drug_ids:
+            v |= self.get_drug_users(drug_id, as_bool=True)
+
+        return v.astype(float)
 
     def filter_phenotypes(self, missing_greater=None, missing_lower=None,
                           variable_type=None):

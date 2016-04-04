@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import shlex
+import json
 import sqlite3
 import readline
 import argparse
@@ -28,6 +29,8 @@ except ImportError:
 
 from cohort_manager.parser import parse_yaml
 from cohort_manager.core import CohortManager, CohortDataError
+from cohort_manager.drugs.chembl import ChEMBL
+from cohort_manager.drugs.drug_search import find_drugs_in_query
 
 
 plt.style.use("ggplot")
@@ -118,15 +121,15 @@ def main():
                 message = colored(message, "red")
             print(message)
             print(e.value)
-        except Exception as e:
-            if STATE["DEBUG"]:
-                # FIXME print full traceback.
-                raise e
+        # except Exception as e:
+        #     if STATE["DEBUG"]:
+        #         # FIXME print full traceback.
+        #         raise e
 
-            message = "\nUnknown error occured.\n"
-            if COLOR:
-                message = colored(message, "red")
-            print("{}\n{}".format(message, e))
+        #     message = "\nUnknown error occured.\n"
+        #     if COLOR:
+        #         message = colored(message, "red")
+        #     print("{}\n{}".format(message, e))
 
 
 def _get_manager():
@@ -434,6 +437,31 @@ def virtual(name, variable_type, expression):
 def delete(phenotype):
     manager = _get_manager()
     manager.delete(phenotype)
+
+
+@command(args_types=(int, ))
+def drug_info(molregno):
+    """Get information about a drug given it's ChEMBL molregno identifier."""
+    with ChEMBL() as db:
+        print(json.dumps(db.get_drug_info(molregno), indent=4))
+
+
+@command(args_types=(str, float), optional=1)
+def drug_search(s, min_score=None):
+    """Query ChEMBL to find a drug corresponding to the string.
+
+    A minimum score can be provided to override the default.
+
+    """
+    if min_score:
+        results = find_drugs_in_query(s, min_score)
+    else:
+        results = find_drugs_in_query(s)
+
+    fields = ("molregno", "matching_name", "score")
+    results = [dict(zip(fields, i)) for i in results]
+
+    print(json.dumps(results, indent=4))
 
 
 def entry_point():

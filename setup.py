@@ -60,7 +60,8 @@ def setup_package():
         packages=find_packages(exclude=["tests", ]),
         entry_points={
             "console_scripts": [
-                "cohort-repl=cohort_manager.scripts.cohort_repl:entry_point"
+                "cohort-repl=cohort_manager.scripts.cohort_repl:entry_point",
+                "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args"
             ],
         },
         classifiers=["Development Status :: 4 - Beta",
