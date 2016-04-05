@@ -50,6 +50,28 @@ class Drug(object):
 
 
 class ChEMBL(object):
+    """Class to facilitate ChEMBL queries.
+
+    This class is configured using environment variables:
+
+    DB_CHEMBL_HOST: The hostname (default 'localhost').
+    DB_CHEMBL_PORT: The port (default '5432').
+    DB_CHEMBL_NAME: The database name.
+    DB_CHEMBL_USERNAME: The PostgreSQL database username.
+    DB_CHEMBL_PASSWORD: The PostgreSQL database password.
+    DB_CHEMBL_B64_PASSWORD: A base64 encoded PostgreSQL database password (for
+                            people who don't want to set passwords as
+                            environment variable in clear text).
+
+    The PostgreSQL database needed for this class to work can be downloaded
+    from the ChEMBL FTP server:
+
+    ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/
+
+    Choose a release and download the chembl_XX_postgresql.tar.gz file.
+    Then follow the instructions.
+
+    """
     def __init__(self):
         self._get_con = functools.partial(
             psycopg2.connect, database=DB_NAME, user=DB_USERNAME,

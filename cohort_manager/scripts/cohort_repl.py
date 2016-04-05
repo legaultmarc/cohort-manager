@@ -11,9 +11,9 @@ import os
 import sys
 import json
 import shlex
-import json
 import sqlite3
 import readline
+import traceback
 import argparse
 
 import numpy as np
@@ -121,15 +121,15 @@ def main():
                 message = colored(message, "red")
             print(message)
             print(e.value)
-        # except Exception as e:
-        #     if STATE["DEBUG"]:
-        #         # FIXME print full traceback.
-        #         raise e
+        except Exception as e:
+            message = "\nUnknown error occured.\n"
+            if COLOR:
+                message = colored(message, "red")
+            print("{}\n{}".format(message, e))
 
-        #     message = "\nUnknown error occured.\n"
-        #     if COLOR:
-        #         message = colored(message, "red")
-        #     print("{}\n{}".format(message, e))
+            print("\nTraceback:")
+            if STATE["DEBUG"]:
+                traceback.print_tb(sys.exc_info()[2])
 
 
 def _get_manager():
@@ -168,34 +168,63 @@ def exit():
 
 @command(args_types=(str, ), optional=1)
 def help(command=None):
-    """Display help about commands or list available commands."""
+    """Display help about commands or list available commands.
+
+    :param command: The name of the command to get it's specific help message.
+    :type command: str
+
+    If nor argument is provided, the short help message will be printed for all
+    available commands. If the provided command name is not found, an exception
+    will be raised.
+
+    """
     if command:
         cmd = REGISTERED_COMMANDS.get(command)
         if not cmd:
             raise REPLException(
                 "Can't show help for unknown command: '{}'".format(command)
             )
-        print(cmd.__doc__)
+        print(_format_long_doc(cmd))
     else:
         print("Available commands are:")
+        longest_cmd = len(max(REGISTERED_COMMANDS, key=lambda x: len(x))) + 10
         for cmd in REGISTERED_COMMANDS:
             f = REGISTERED_COMMANDS[cmd]
             if COLOR:
                 cmd = colored(cmd, "red")
 
-            print("\t{}:\t{}".format(cmd, f.__doc__))
+            print("  {}:{space}{}".format(
+                cmd,
+                _get_short_doc(f),
+                space=" " * (longest_cmd - len(cmd))
+            ))
 
 
 @command(args_types=(str, ))
 def build(yaml_filename):
-    """Build and load a cohort using a YAML descriptor."""
+    """Build and load a cohort using a YAML descriptor.
+
+    :param yaml_filename: The filename of the YAML cohort descriptor.
+    :type yaml_filename: str
+
+    This command will build the cohort and load it in the current session.
+
+    """
     STATE["manager"] = parse_yaml(yaml_filename)
     STATE["manager"].validate()
 
 
 @command(args_types=(str, ))
 def sql(sql):
-    """Execute a SQL query on the cohort manager."""
+    """Execute a SQL query on the cohort manager.
+
+    :param sql: The SQL query.
+    :type sql: str
+
+    This can be used to directly interrogate the relational database
+    underlying the cohort manager.
+
+    """
     manager = _get_manager()
     try:
         manager.cur.execute(sql)
@@ -208,7 +237,13 @@ def sql(sql):
 
 @command
 def list():
-    """List available phenotypes."""
+    """List available phenotypes.
+
+    This will display all the available phenotypes for the currently loaded
+    cohort. A pager (e.g. less) will automatically be used if the number
+    of variables is greater than 24.
+
+    """
     manager = _get_manager()
     pager = (manager.get_number_phenotypes() > 24) and STATE["PAGER"]
     manager.tree.pretty_print(pager)
@@ -216,7 +251,14 @@ def list():
 
 @command(args_types=(str, ))
 def info(phenotype):
-    """Get information and summary statistics on the phenotype."""
+    """Get information and summary statistics on a phenotype.
+
+    :param phenotype: The name of the phenotype to get summary information on.
+    :type phenotype: str
+
+    Use 'list' to see all the available phenotypes for this command.
+
+    """
     data, meta = _get_data_meta(phenotype)
 
     print("Phenotype meta data:")
@@ -257,7 +299,14 @@ def info(phenotype):
 
 @command(args_types=(str, ))
 def boxplot(phenotype):
-    """Draw a boxplot for the given continuous phenotype."""
+    """Draw a boxplot for the given continuous phenotype.
+
+    :param phenotype: Display a boxplot for the provided continuous phenotype.
+    :type phenotype: str
+
+    An exception will be raised if the required phenotype is not continuous.
+
+    """
     data, meta = _get_data_meta(phenotype)
     data = data[~np.isnan(data)]
     if meta["variable_type"] != "continuous":
@@ -275,7 +324,17 @@ def boxplot(phenotype):
 
 @command(args_types=(str, str))
 def scatter(y, x):
-    """Plot two continuous phenotypes in a scatterplot."""
+    """Plot two continuous phenotypes in a scatterplot.
+
+    :param y: The phenotype to plot as the y axis.
+    :type y: str
+
+    :param x: The phenotype to ploy as the x axis.
+    :type x: str
+
+    This function is only available for continuous phenotypes.
+
+    """
     datay, metay = _get_data_meta(y)
     datax, metax = _get_data_meta(x)
 
@@ -294,7 +353,16 @@ def scatter(y, x):
 @command(args_types=(str, int), optional=1)
 def histogram(phenotype, nbins=None):
     """Draw a histogram (or a bar plot for discrete variables) of the data.
-    There is an optional argument for the number of bins.
+
+    :param phenotype: The phenotype for which to draw the histogram.
+    :type phenotype: str
+
+    :param nbins: The number of bins for the histogram (optional).
+    :type nbins: int
+
+    This function will work on both continuous and discrete variables (but
+    not factors).
+
     """
     data, meta = _get_data_meta(phenotype)
     if meta["variable_type"] not in ("continuous", "discrete"):
@@ -322,7 +390,14 @@ def histogram(phenotype, nbins=None):
 
 @command(args_types=(str, ))
 def normal_qq_plot(phenotype):
-    """Plot the Normal QQ plot of the observations."""
+    """Plot the Normal QQ plot of the observations.
+
+    :param phenotype: The phenotype for which to draw the QQ plot.
+    :type phenotype: str
+
+    This function is only available for continuous phenotypes.
+
+    """
     data, meta = _get_data_meta(phenotype)
     data = data[~np.isnan(data)]
     if meta["variable_type"] != "continuous":
@@ -366,7 +441,15 @@ def normal_qq_plot(phenotype):
 
 @command(args_types=(str, ))
 def load(path):
-    """Load the cohort from it's path on disk."""
+    """Load the cohort from it's path on disk.
+
+    :param path: The path to the cohort directory.
+    :type path: str
+
+    This will bind a manager instance to the REPL and will initialize the
+    phenotype tree.
+
+    """
     if not os.path.isdir(path):
         raise REPLException(
             "Could not find cohort directory '{}'.".format(path)
@@ -385,7 +468,18 @@ def load(path):
 
 @command(args_types=(str, ))
 def update(phenotype):
-    """Update the metadata for a given phenotype."""
+    """Update the metadata for a given phenotype.
+
+    :param phenotype: The phenotype for which the metadata will be updated.
+    :type phenotype: str
+
+    This will display a JSON string that the user can edit to update the
+    database.
+
+    Note that it is not possible to rename phenotypes using this function as
+    it is used as the database key to access the data.
+
+    """
     data, meta = _get_data_meta(phenotype)
     meta.pop("name")
 
@@ -406,13 +500,52 @@ def update(phenotype):
 
 @command
 def validate():
-    """Run data balidation routine."""
+    """Run data validation routine."""
     _get_manager().validate(mode="warn")
 
 
 @command(args_types=(str, str, str))
 def virtual(name, variable_type, expression):
-    """Create a virtual variable with the given name."""
+    """Create a virtual variable.
+
+    :param name: The name of the new variable/phenotype.
+    :type name: str
+
+    :param variable_type: The type of the new variable. This should be
+                          consistent with the provided expression.
+    :type variable_type: str
+
+    :param expression: A valid Python expression that will be used to create
+                       the virtual variable (see examples).
+    :type expression: str
+
+    Examples:
+
+        # Create a new continuous variable that is the log transform of another.
+        [cohort repl]> virtual logWeight continuous 'v("Weight").log()'
+
+        # Create a new discrete variable.
+        [cohort repl]> virtual myVar discrete '(v("Age") > 50) & v("MyocardialInfarction")'
+
+        # Compute z-scores.
+        [cohort repl]> virtual z continuous '(v("Weight") - v("Weight").mean()) / v("Weight").std()'
+
+    Note that the `v()` function is used to allow users to create virtual
+    variables based on currently existing phenotypes. Continuous phenotypes
+    have special methods like 'log', 'mean', 'std' and support operators like
+    '-', '+', '/', '*', '**' as well as comparators '>', '<', '<=', '>=', '==',
+    '!='.
+
+    Discrete variables support most of the boolean operators '&', '|' and
+    can be inverted using the '~' operator.
+
+    This procedure correctly handles missing values for virtual variables.
+
+    For Python programmers, note that `v()` is an alias to
+    `CohortManager.variable()` which returns a `cohort_manager.core._Variable`
+    instance.
+
+    """
     if variable_type not in ("discrete", "continuous", "factor"):
         raise REPLException("Invalid variable type.")
 
@@ -435,22 +568,45 @@ def virtual(name, variable_type, expression):
 
 @command(args_types=(str, ))
 def delete(phenotype):
+    """Delete the given phenotype.
+
+    :param phenotype: The name of the phenotype.
+    :type phenotype: str
+
+    This function will not try to stop you and it can't be reverted.
+
+    """
     manager = _get_manager()
     manager.delete(phenotype)
 
 
 @command(args_types=(int, ))
 def drug_info(molregno):
-    """Get information about a drug given it's ChEMBL molregno identifier."""
+    """Get information about a drug given it's ChEMBL molregno identifier.
+
+    :param molregno: The ChEMBL molregno, a molecule identifier.
+    :type molregno: int
+
+    The molregno can be found using the 'drug_search' function.
+    Note that this function only works if ChEMBL is installed locally and
+    if the configuration is valid. For more information on setting up ChEMBL,
+    refer to the documentation on `cohort_manager.drugs.chembl.ChEMBL`.
+
+    """
     with ChEMBL() as db:
         print(json.dumps(db.get_drug_info(molregno), indent=4))
 
 
 @command(args_types=(str, float), optional=1)
 def drug_search(s, min_score=None):
-    """Query ChEMBL to find a drug corresponding to the string.
+    """Query ChEMBL to find a drug corresponding to the provided query.
 
-    A minimum score can be provided to override the default.
+    :param s: The query string (a drug name).
+    :type s: str
+
+    :param min_score: The minimum similarity score (between 0 and 1) to report
+                      the results (Optional).
+    :type min_score: float
 
     """
     if min_score:
@@ -462,6 +618,51 @@ def drug_search(s, min_score=None):
     results = [dict(zip(fields, i)) for i in results]
 
     print(json.dumps(results, indent=4))
+
+
+def _get_short_doc(f):
+    """Returns the first line of the doctstring."""
+    s = f.__doc__
+    if not s:
+        return ""
+
+    s = s.splitlines()
+    if len(s) == 1:
+        return s[0]
+
+    # Find the first empty line.
+    idx = -1
+    for idx, chunk in enumerate(s):
+        if chunk.isspace() or chunk == "":
+            break
+
+    if idx != -1:
+        return " ".join([i.strip() for i in s[:idx] if not i.isspace() and
+                                                       i != ""])
+
+    return s[0]
+
+
+def _format_long_doc(f):
+    """Formats a docstring to print it to screen."""
+    if not f.__doc__:
+        return ""
+
+    li = f.__doc__.splitlines()
+    s = ""
+    done_first_line = False
+    for chunk in li:
+        if not done_first_line and (chunk.isspace() or chunk == ""):
+            done_first_line = True
+            s += "\n\n"
+
+        elif not done_first_line:
+            s += " {}".format(chunk.strip())
+
+        else:
+            s += "{}\n".format(chunk)
+
+    return s
 
 
 def entry_point():
