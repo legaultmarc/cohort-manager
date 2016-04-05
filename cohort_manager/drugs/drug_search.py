@@ -30,8 +30,18 @@ def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
     # If there are no perfect matches, we continue searching in the synonyms.
     perfect_matches = [i for i in out if i[2] == 1 and query == i[1]]
 
-    if not perfect_matches:
-        out.extend(_match_if_score(query, DRUG_DB["SYNONYMS"], min_score))
+    if perfect_matches:
+        return list(set(perfect_matches))
+
+    # Look at the synonyms.
+    syn_matches = _match_if_score(query, DRUG_DB["SYNONYMS"], min_score)
+
+    perfect_matches = [i for i in syn_matches if i[2] == 1 and query == i[1]]
+
+    if perfect_matches:
+        return list(set(perfect_matches))
+
+    out.extend(syn_matches)
 
     return list(set(out))
 
@@ -71,6 +81,10 @@ def remove_substring_matches(queries, results, min_length=4):
     """Remove perfect matches that are not 'words' in the query.
 
     As an example, remove ST (molregno 674955) from matching PRAVASTATIN.
+
+    TODO: Fix the case where the matching drug has multiple words (e.g.
+    CLOBETASOL PROPIONATE).
+
     """
     out = []
     for i, query in enumerate(queries):
@@ -78,11 +92,18 @@ def remove_substring_matches(queries, results, min_length=4):
         filtered_results = []
         for tu in results[i]:
             molregno, match, score = tu
-            if len(match) < min_length and match not in words:
-                # We ignore these.
-                pass
-            else:
+            if len(match) > min_length:
+                # Match is too big to eliminate (greater than min_length).
                 filtered_results.append(tu)
+            else:
+                # Check if it is a word match.
+                match = match.split()
+                if not (set(words) - set(match)):
+                    filtered_results.append(tu)
+                else:
+                    # We ignore substring matches.
+                    pass
+
         out.append(filtered_results)
 
     return out
@@ -148,8 +169,8 @@ def write_results(filename, queries, results):
             _written.add(query)
             if results[i]:
                 for tu in results[i]:
-                    row = [query]
-                    row.extend(tu[:2])
+                    molregno, match, score = tu
+                    row = [query, molregno, match]
                     writer.writerow(row)
             else:
                 writer.writerow([query, "", ""])

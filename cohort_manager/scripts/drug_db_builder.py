@@ -21,17 +21,25 @@ from cohort_manager.core import CohortManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-CURATE_DB_FILENAME = "drug_database_for_curation.txt"
+CURATE_DB_FILENAME = "drug_database_for_curation.csv"
 
 
 def _read_drugs_file(args):
     logger.info("Reading pharmacotherapy file '{}'.".format(args.filename))
 
     # Open the pharmacotherapy file.
+    params = {
+        "dtype": {
+            args.drug_column: str,
+            args.sample_column: str
+        },
+        "usecols": [args.drug_column, args.sample_column]
+    }
+
     if args.delim:
-        drugs_data = pd.read_csv(args.filename, sep=args.delim)
-    else:
-        drugs_data = pd.read_csv(args.filename)
+        params["sep"] = args.delim
+
+    drugs_data = pd.read_csv(args.filename, **params)
 
     # Check that the required columns are in the file.
     if args.sample_column not in drugs_data.columns:
@@ -43,6 +51,7 @@ def _read_drugs_file(args):
                          "".format(args.drug_column))
 
     drugs_data = drugs_data[[args.sample_column, args.drug_column]]
+
     logger.info("Read {} rows.".format(drugs_data.shape[0]))
     return drugs_data
 
@@ -51,7 +60,9 @@ def create_curation_file(args):
     drugs_data = _read_drugs_file(args)
 
     # Create the drug correspondance table.
-    _parse_freetext_drugs(drugs_data[args.drug_column])
+    _parse_freetext_drugs(drugs_data[args.drug_column].astype(str),
+                          min_score=args.similarity_score_threshold,
+                          match_words=args.match_words)
 
     print(
         "\nA file containing matches for all the queries has been generated.\n"
@@ -66,17 +77,24 @@ def create_curation_file(args):
     )
 
 
-def _parse_freetext_drugs(names):
+def _parse_freetext_drugs(names, min_score, match_words):
     """Parse a list of freetext drug names and create a delimited file to allow
     manual curation.
 
     """
     logger.info("Matching freetext to ChEMBL (this might take a while).")
-    matching_drugs = ds.find_drugs_in_queries(names)
+    logger.info("Minimum similarity score is {}".format(min_score))
+    matching_drugs = ds.find_drugs_in_queries(names, min_score)
 
     # Remove small substring matches.
-    logger.info("Removing short substring matches.")
-    matching_drugs = ds.remove_substring_matches(names, matching_drugs)
+    if match_words:
+        logger.info("Removing substring matches (--match-words).")
+        matching_drugs = ds.remove_substring_matches(
+            names, matching_drugs, min_length=float("+infinity")
+        )
+    else:
+        logger.info("Removing short substring matches.")
+        matching_drugs = ds.remove_substring_matches(names, matching_drugs)
 
     # Fix hierarchy.
     logger.info("Keeping the parent drug when necessary (multiple matching "
@@ -97,8 +115,10 @@ def build_database(args):
     logger.info(
         "Reading the curated drug database file '{}'.".format(args.database)
     )
-    curated = pd.read_csv(args.database, sep=",", header=0)
-    curated = curated[["query", "molregno"]]
+    curated = pd.read_csv(
+        args.database, sep=",", header=0, usecols=["query", "molregno"],
+    )
+    curated.dropna(how="any", inplace=True)
 
     # Get the cohort.
     cohort = CohortManager(args.cohort)
@@ -106,8 +126,7 @@ def build_database(args):
     # Query to list of molregnos.
     query_dict = collections.defaultdict(list)
     for i, row in curated.iterrows():
-        if not np.isnan(row.molregno):
-            query_dict[row.query].append(int(row.molregno))
+        query_dict[row.query].append(int(row.molregno))
 
     # Load the pharmacotherapy data.
     no_matches = set()
@@ -211,8 +230,14 @@ def parse_args():
         "--similarity-score-threshold",
         help=("Minimum similarity score threshold to identify matching drugs "
               "in ChEMBL"),
-        type=str,
-        default=None,
+        type=float,
+        default=ds.DEFAULT_MIN_SCORE,
+    )
+
+    parser.add_argument(
+        "--match-words",
+        help="Only match words and not substrings.",
+        action="store_true",
     )
 
     args = parser.parse_args()
