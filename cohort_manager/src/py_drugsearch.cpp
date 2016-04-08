@@ -30,8 +30,7 @@ static PyMethodDef CDrugSearchMethods[] = {
      ":param word: The name of the drug to search for. Typically this is "
      "looped over for all possible drugs.\n"
      ":type word: str\n\n"
-     ":returns: The alignment score (1 means that `word` is a substring of "
-     "`query`).\n"
+     ":returns: The alignment score\n"
      ":rtype: float\n"
     },
     {NULL, NULL, 0, NULL} // Sentinel
