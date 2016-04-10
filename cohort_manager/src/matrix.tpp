@@ -3,10 +3,10 @@
  **/
 
 #include <iostream>
+#include <utility>
 #include <stdexcept>
 
-#include "includes/matrix.h"
-
+using std::pair;
 using std::size_t;
 using std::cout;
 using std::endl;
@@ -45,6 +45,14 @@ void Matrix<T>::set(size_t i, size_t j, const T& val) {
 }
 
 /**
+ * Get an element using a pair object (instead of indexing).
+ **/
+template <class T>
+T* Matrix<T>::get(pair<size_t, size_t> pos) {
+    return &((*this)[pos.first][pos.second]);
+}
+
+/**
  * Safe version of the set method.
  **/
 template <class T>
@@ -75,9 +83,3 @@ void Matrix<T>::print() {
         cout << endl;
     }
 }
-
-/**
- * We need to either put the implementation in the header file or to do
- * explicit instantiations. For now, I will do the explicit instantiations.
- **/
-template class Matrix<int>;

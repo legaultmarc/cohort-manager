@@ -8,12 +8,16 @@ import functools
 import logging
 import csv
 
-from .c_drug_search import align_score
+
+import numpy as np
+
+
+from .c_drug_search import align_score as c_align_score
 from .chembl import ChEMBL
 
 
 DRUG_DB = {}
-DEFAULT_MIN_SCORE = 0.85
+DEFAULT_MIN_SCORE = 0
 logger = logging.getLogger(__name__)
 
 
@@ -46,12 +50,73 @@ def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
     return list(set(out))
 
 
+def py_align_score(query, word):
+    """Python implementation of the alignment algorithm (for prototyping and
+    speed comparisons."""
+    m = len(word) + 1
+    n = len(query) + 1
+    max_score = 0
+
+    point = {
+        "LEFT": 1,
+        "UP": 2,
+        "DIAG": 3,
+    }
+
+    mat = np.zeros((m, n), dtype=int)
+    ptr = np.zeros((m, n), dtype=int)
+
+    for i in range(1, m):
+        for j in range(1, n):
+            match_score = mat[i - 1, j - 1]
+            if word[i - 1] == query[j - 1]:
+                match_score += 3
+            else:
+                match_score -= 1
+
+            h_indel = mat[i - 1, j] - 2
+            v_indel = mat[i, j - 1] - 2
+
+            mat[i, j] = match_score
+            ptr[i, j] = point["DIAG"]
+
+            if h_indel > mat[i, j]:
+                mat[i, j] = h_indel
+                ptr[i, j] = point["LEFT"]
+
+            if v_indel > mat[i, j]:
+                mat[i, j] = v_indel
+                ptr[i, j] = point["UP"]
+
+            if mat[i, j] > max_score:
+                max_score = mat[i, j]
+
+    return max_score
+
+
+def _print_mat(mat, query, word):
+    query = " " + query
+    word = " " + word
+
+    # print query.
+    print(" " * 4, end="")
+    for c in query:
+        print("{},".format(c).ljust(6), end="")
+    print()
+    for i, row in enumerate(mat):
+        print("{},".format(word[i]).ljust(4), end="")
+        for n in row:
+            print("{},".format(n).ljust(6), end="")
+        print()
+
+
 def _match_if_score(query, db, min_score):
     out = []
     for molregno, name in db:
-        score = align_score(query, name)
-        if score >= min_score:
-            out.append((molregno, name, score))
+        score, left, right = c_align_score(query, name)
+        normalized_score = score / len(name)
+        if normalized_score >= min_score:
+            out.append((molregno, name, normalized_score))
     return out
 
 

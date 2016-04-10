@@ -37,8 +37,7 @@ def write_version_file(fn=None):
 
 def drug_search_extension():
     extension_info = {
-        "sources": ["cohort_manager/src/matrix.cpp",
-                    "cohort_manager/src/query.cpp",
+        "sources": ["cohort_manager/src/query.cpp",
                     "cohort_manager/src/py_drugsearch.cpp"],
     }
     return Extension("cohort_manager.drugs.c_drug_search", **extension_info)

@@ -3,6 +3,9 @@
 
 #include <string>
 
-double alignScore(const std::string& query, const std::string& word);
+struct Alignment { int score, left, right; };
+enum Move { UP, LEFT, DIAG };
+Alignment alignScore(const std::string& query, const std::string& word);
+
 
 #endif

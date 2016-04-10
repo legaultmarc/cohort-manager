@@ -614,6 +614,8 @@ def drug_search(s, min_score=None):
     else:
         results = find_drugs_in_query(s)
 
+    results = sorted(results, key=lambda x: x[-1], reverse=True)[:5]
+
     fields = ("molregno", "matching_name", "score")
     results = [dict(zip(fields, i)) for i in results]
 

@@ -15,9 +15,14 @@ static PyObject* align_score(PyObject *self, PyObject *args) {
     std::string s_query = std::string(query);
     std::string s_word = std::string(word);
 
-    double score = alignScore(s_query, s_word);
+    Alignment aln = alignScore(s_query, s_word);
 
-    return PyFloat_FromDouble(score);
+    PyObject *out = PyTuple_New(3);
+    PyTuple_SET_ITEM(out, 0, PyLong_FromLong(aln.score));
+    PyTuple_SET_ITEM(out, 1, PyLong_FromLong(aln.left));
+    PyTuple_SET_ITEM(out, 2, PyLong_FromLong(aln.right));
+
+    return out;
 }
 
 static PyMethodDef CDrugSearchMethods[] = {
