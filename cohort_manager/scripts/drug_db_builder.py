@@ -13,7 +13,6 @@ import argparse
 import logging
 
 import pandas as pd
-import numpy as np
 
 import cohort_manager.drugs.drug_search as ds
 from cohort_manager.core import CohortManager
@@ -59,9 +58,16 @@ def _read_drugs_file(args):
 def create_curation_file(args):
     drugs_data = _read_drugs_file(args)
 
+    # If there is a custom database, we need to read it.
+    custom = None
+    if args.custom_database:
+        custom = pd.read_csv(args.custom_database)
+        custom = custom[["name", "molregno"]]
+
     # Create the drug correspondance table.
     _parse_freetext_drugs(drugs_data[args.drug_column].astype(str),
-                          min_score=args.similarity_score_threshold)
+                          min_score=args.similarity_score_threshold,
+                          custom=custom)
 
     command = ("drug-db-builder build "
                "--sample-column SAMPLE_ID "
@@ -81,11 +87,16 @@ def create_curation_file(args):
     )
 
 
-def _parse_freetext_drugs(names, min_score):
+def _parse_freetext_drugs(names, min_score, custom):
     """Parse a list of freetext drug names and create a delimited file to allow
     manual curation.
 
     """
+    if custom is not None:
+        logger.info("Adding the custom database with {} entries to the "
+                    "matching algorithm.".format(custom.shape[0]))
+        ds.add_custom_database(custom)
+
     logger.info("Minimum similarity score is {}".format(min_score))
     logger.info("Matching freetext to ChEMBL (this might take a while).")
     matching_drugs = ds.find_drugs_in_queries(names, min_score)

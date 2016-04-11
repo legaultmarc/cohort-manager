@@ -9,10 +9,7 @@ import multiprocessing
 import functools
 import logging
 
-import numpy as np
 import pandas as pd
-from gepyto.structures.region import _Segment
-
 
 from .c_drug_search import align_score as c_align_score
 from .chembl import ChEMBL
@@ -24,14 +21,24 @@ logger = logging.getLogger(__name__)
 
 
 def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
-    """Searches the query to find any element of drugs."""
-    if not DRUG_DB:
+    """Searches the query to find any element of drugs.
+
+    TODO. It would be best to prioritize matches in the CUSTOM database to
+    make it easy for users to override bad behaviour or unwanted matches.
+
+    """
+    if "PREFERRED" not in DRUG_DB or "SYNONYMS" not in DRUG_DB:
         _init_drug_db()
 
     query = query.upper()
 
+    # Search in custom database.
+    out = []
+    if DRUG_DB["CUSTOM"]:
+        out.extend(_match_if_score(query, DRUG_DB["CUSTOM"], min_score))
+
     # Search in preferred.
-    out = _match_if_score(query, DRUG_DB["PREFERRED"], min_score)
+    out.extend(_match_if_score(query, DRUG_DB["PREFERRED"], min_score))
 
     # If there are no perfect matches, we continue searching in the synonyms.
     perfect_matches = [i for i in out if i[2] == 1 and query == i[1]]
@@ -50,6 +57,16 @@ def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
     out.extend(syn_matches)
 
     return _choose_hits(query, set(out))
+
+
+def _match_if_score(query, db, min_score):
+    out = []
+    for molregno, name in db:
+        score, left, right = c_align_score(query, name)
+        normalized_score = score / (3 * len(name))
+        if normalized_score >= min_score:
+            out.append((molregno, name, score, left, right))
+    return out
 
 
 def _choose_hits(query, hits, keep_short=False):
@@ -82,7 +99,7 @@ def _choose_hits(query, hits, keep_short=False):
         if new_chars >= 3:
             out.append(hit)
             explained.append(cur)
-            explained = sorted(explained, key=lambda x:x.start)
+            explained = sorted(explained, key=lambda x: x.start)
             explained = _Segment.merge_segments(explained)
 
     # Hits are not satisfactory if the selection explains less than a fraction
@@ -154,16 +171,6 @@ class _Segment(object):
 
     def __repr__(self):
         return "<_Segment object {}-{}>".format(self.start, self.end)
-
-
-def _match_if_score(query, db, min_score):
-    out = []
-    for molregno, name in db:
-        score, left, right = c_align_score(query, name)
-        normalized_score = score / (3 * len(name))
-        if normalized_score >= min_score:
-            out.append((molregno, name, score, left, right))
-    return out
 
 
 def find_drugs_in_queries(queries, min_score=DEFAULT_MIN_SCORE):
@@ -270,6 +277,18 @@ def write_results(filename, queries, results):
     )
     df.loc[df["molregno"] != "", :].to_excel(writer, "Curation", index=False)
     writer.save()
+
+
+def add_custom_database(df):
+    """Add a list of custom mapping name -> molregno.
+
+    :param df: A dataframe with the expected columns.
+    :dtype df: pandas.DataFrame
+
+    """
+    DRUG_DB["CUSTOM"] = []
+    for i, row in df.iterrows():
+        DRUG_DB["CUSTOM"].append((row["molregno"], row["name"]))
 
 
 def _init_drug_db():
