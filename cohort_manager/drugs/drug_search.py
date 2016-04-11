@@ -2,14 +2,16 @@
 Utilities to parse free text and find drug names.
 """
 
+from __future__ import division, print_function
+
 import collections
 import multiprocessing
 import functools
 import logging
-import csv
-
 
 import numpy as np
+import pandas as pd
+from gepyto.structures.region import _Segment
 
 
 from .c_drug_search import align_score as c_align_score
@@ -17,7 +19,7 @@ from .chembl import ChEMBL
 
 
 DRUG_DB = {}
-DEFAULT_MIN_SCORE = 0
+DEFAULT_MIN_SCORE = 0.9
 logger = logging.getLogger(__name__)
 
 
@@ -47,76 +49,120 @@ def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
 
     out.extend(syn_matches)
 
-    return list(set(out))
+    return _choose_hits(query, set(out))
 
 
-def py_align_score(query, word):
-    """Python implementation of the alignment algorithm (for prototyping and
-    speed comparisons."""
-    m = len(word) + 1
-    n = len(query) + 1
-    max_score = 0
+def _choose_hits(query, hits, keep_short=False):
+    """Choose hits that best explain the user sequence."""
+    if not hits:
+        return hits
 
-    point = {
-        "LEFT": 1,
-        "UP": 2,
-        "DIAG": 3,
-    }
+    hits = sorted(hits, key=lambda x: x[2], reverse=True)
+    out = []
+    explained = []
+    for hit in hits:
+        molregno, name, score, left, right = hit
 
-    mat = np.zeros((m, n), dtype=int)
-    ptr = np.zeros((m, n), dtype=int)
+        # Exclude very short database matches as these are mostly noise.
+        if len(name) <= 3 and not keep_short:
+            continue
 
-    for i in range(1, m):
-        for j in range(1, n):
-            match_score = mat[i - 1, j - 1]
-            if word[i - 1] == query[j - 1]:
-                match_score += 3
-            else:
-                match_score -= 1
+        cur = _Segment(left, right)
 
-            h_indel = mat[i - 1, j] - 2
-            v_indel = mat[i, j - 1] - 2
+        if not out:
+            out.append(hit)
+            explained.append(cur)
+            continue
 
-            mat[i, j] = match_score
-            ptr[i, j] = point["DIAG"]
+        # We add the hit if it explains something new.
+        new_chars = len(name)
+        for segment in explained:
+            new_chars -= segment.n_overlap(cur)
 
-            if h_indel > mat[i, j]:
-                mat[i, j] = h_indel
-                ptr[i, j] = point["LEFT"]
+        if new_chars >= 3:
+            out.append(hit)
+            explained.append(cur)
+            explained = sorted(explained, key=lambda x:x.start)
+            explained = _Segment.merge_segments(explained)
 
-            if v_indel > mat[i, j]:
-                mat[i, j] = v_indel
-                ptr[i, j] = point["UP"]
+    # Hits are not satisfactory if the selection explains less than a fraction
+    # of the query.
+    total_explained = sum([seg.end - seg.start + 1 for seg in explained])
+    if (total_explained / len(query)) < 0.4:
+        return []
 
-            if mat[i, j] > max_score:
-                max_score = mat[i, j]
-
-    return max_score
+    return out
 
 
-def _print_mat(mat, query, word):
-    query = " " + query
-    word = " " + word
+class _Segment(object):
+    """Class that supports basic manipulation of segments.
 
-    # print query.
-    print(" " * 4, end="")
-    for c in query:
-        print("{},".format(c).ljust(6), end="")
-    print()
-    for i, row in enumerate(mat):
-        print("{},".format(word[i]).ljust(4), end="")
-        for n in row:
-            print("{},".format(n).ljust(6), end="")
-        print()
+    Adapted from gepyto (https://github.com/legaultmarc/gepyto).
+
+    """
+    def __init__(self, start, end):
+        self.start = int(start)
+        self.end = int(end)
+        assert self.start <= self.end
+
+    def overlaps_with(self, segment):
+        return (self.start <= segment.end and
+                self.end >= segment.start)
+
+    def n_overlap(self, segment):
+        if not self.overlaps_with(segment):
+            return 0
+        return min(self.end, segment.end) - max(self.start, segment.start) + 1
+
+    @staticmethod
+    def merge_segments(li):
+        """Merge overlapping segments in a sorted list."""
+        for i in range(len(li) - 1):
+            cur = li[i]
+            nxt = li[i + 1]
+            if nxt.start < cur.start:
+                raise Exception("Only sorted lists of segments can be "
+                                "merged. Sort using the position first.")
+
+        merged_segments = []
+        i = 0
+        while i < len(li) - 1:
+            j = i
+
+            # Walk as long as the segments are overlapping.
+            cur = li[i]
+            nxt = li[i + 1]
+            block = [cur.start, cur.end]
+            if nxt.start <= cur.end:
+                block[1] = max(block[1], nxt.end)
+
+            while nxt.start <= block[1] and j + 1 < len(li) - 1:
+                block[1] = max(block[1], nxt.end)
+                j += 1
+                cur = li[j]
+                nxt = li[j + 1]
+
+            merged_segments.append(
+                _Segment(block[0], block[1])
+            )
+            i = j + 1
+
+        if li[-1].start > li[-2].end:
+            merged_segments.append(li[-1])
+
+        return merged_segments
+
+    def __repr__(self):
+        return "<_Segment object {}-{}>".format(self.start, self.end)
 
 
 def _match_if_score(query, db, min_score):
     out = []
     for molregno, name in db:
         score, left, right = c_align_score(query, name)
-        normalized_score = score / len(name)
+        normalized_score = score / (3 * len(name))
         if normalized_score >= min_score:
-            out.append((molregno, name, normalized_score))
+            out.append((molregno, name, score, left, right))
     return out
 
 
@@ -140,38 +186,6 @@ def _multiprocessing_query(cache, min_score, query):
     result = find_drugs_in_query(query, min_score)
     cache[query] = result
     return result
-
-
-def remove_substring_matches(queries, results, min_length=4):
-    """Remove perfect matches that are not 'words' in the query.
-
-    As an example, remove ST (molregno 674955) from matching PRAVASTATIN.
-
-    TODO: Fix the case where the matching drug has multiple words (e.g.
-    CLOBETASOL PROPIONATE).
-
-    """
-    out = []
-    for i, query in enumerate(queries):
-        words = set(query.split())
-        filtered_results = []
-        for tu in results[i]:
-            molregno, match, score = tu
-            if len(match) > min_length:
-                # Match is too big to eliminate (greater than min_length).
-                filtered_results.append(tu)
-            else:
-                # Check if it is a word match.
-                match = match.split()
-                if not (set(words) - set(match)):
-                    filtered_results.append(tu)
-                else:
-                    # We ignore substring matches.
-                    pass
-
-        out.append(filtered_results)
-
-    return out
 
 
 def fix_hierarchical_matches(queries, results):
@@ -220,25 +234,42 @@ def fix_hierarchical_matches(queries, results):
 
 
 def write_results(filename, queries, results):
-    """Write the results of drug queries to disk."""
-    # Write queries matches only once.
-    _written = set()
-    with open(filename, "w") as f:
-        writer = csv.writer(f, delimiter=",", quotechar='"',
-                            quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(["query", "molregno", "matching_drug"])
-        for i, query in enumerate(queries):
-            if query in _written:
-                continue
+    """Write the results of drug queries to disk.
 
-            _written.add(query)
-            if results[i]:
-                for tu in results[i]:
-                    molregno, match, score = tu
-                    row = [query, molregno, match]
-                    writer.writerow(row)
-            else:
-                writer.writerow([query, "", ""])
+    We will write an excel spreadsheet.
+
+    """
+    writer = pd.ExcelWriter(filename)
+
+    # Process results to long format.
+    _added = set()
+    pd_results = []
+    for i, res in enumerate(results):
+        if queries[i] in _added:
+            continue
+        _added.add(queries[i])
+
+        if not res:
+            pd_results.append([queries[i], "", "", "", "", ""])
+        else:
+            for tu in res:
+                pd_results.append([queries[i], *tu])
+
+    df = pd.DataFrame(
+        pd_results,
+        columns=("query", "molregno", "name", "score", "left", "right"),
+        dtype=str
+    )
+
+    df = df[["query", "molregno", "name", "score"]]
+    df = df.sort_values("query")
+
+    # Write to disk.
+    df.loc[df["molregno"] == "", ["query", "molregno"]].to_excel(
+        writer, "Not Found", index=False
+    )
+    df.loc[df["molregno"] != "", :].to_excel(writer, "Curation", index=False)
+    writer.save()
 
 
 def _init_drug_db():

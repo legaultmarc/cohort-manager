@@ -21,7 +21,7 @@ from cohort_manager.core import CohortManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-CURATE_DB_FILENAME = "drug_database_for_curation.csv"
+CURATE_DB_FILENAME = "drug_database_for_curation.xlsx"
 
 
 def _read_drugs_file(args):
@@ -61,8 +61,13 @@ def create_curation_file(args):
 
     # Create the drug correspondance table.
     _parse_freetext_drugs(drugs_data[args.drug_column].astype(str),
-                          min_score=args.similarity_score_threshold,
-                          match_words=args.match_words)
+                          min_score=args.similarity_score_threshold)
+
+    command = ("drug-db-builder build "
+               "--sample-column SAMPLE_ID "
+               "--drug-column DRUG_NAME "
+               "--database drug_database_for_curation.xlsx "
+               "--cohort-name MY_COHORT pharmacotherapy.csv")
 
     print(
         "\nA file containing matches for all the queries has been generated.\n"
@@ -72,29 +77,18 @@ def create_curation_file(args):
         "To help you with this task, the REPL contains useful commands to "
         "search and get information on ChEMBL ('drug-search' and 'drug-info')."
         "\nWhen this process is complete, run the following command:\n\n"
-        "drug-db-builder --database drug_database_for_curation.txt --cohort "
-        "COHORT_NAME pharmacotherapy_file.txt\n\n".format(CURATE_DB_FILENAME)
+        "{}\n\n".format(CURATE_DB_FILENAME, command)
     )
 
 
-def _parse_freetext_drugs(names, min_score, match_words):
+def _parse_freetext_drugs(names, min_score):
     """Parse a list of freetext drug names and create a delimited file to allow
     manual curation.
 
     """
-    logger.info("Matching freetext to ChEMBL (this might take a while).")
     logger.info("Minimum similarity score is {}".format(min_score))
+    logger.info("Matching freetext to ChEMBL (this might take a while).")
     matching_drugs = ds.find_drugs_in_queries(names, min_score)
-
-    # Remove small substring matches.
-    if match_words:
-        logger.info("Removing substring matches (--match-words).")
-        matching_drugs = ds.remove_substring_matches(
-            names, matching_drugs, min_length=float("+infinity")
-        )
-    else:
-        logger.info("Removing short substring matches.")
-        matching_drugs = ds.remove_substring_matches(names, matching_drugs)
 
     # Fix hierarchy.
     logger.info("Keeping the parent drug when necessary (multiple matching "
@@ -115,13 +109,17 @@ def build_database(args):
     logger.info(
         "Reading the curated drug database file '{}'.".format(args.database)
     )
-    curated = pd.read_csv(
-        args.database, sep=",", header=0, usecols=["query", "molregno"],
+    curated = pd.read_excel(
+        args.database, sheetname=None
     )
+    for sheet in curated.keys():
+        curated[sheet] = curated[sheet][["query", "molregno"]]
+    curated = pd.concat(curated.values())
+
     curated.dropna(how="any", inplace=True)
 
     # Get the cohort.
-    cohort = CohortManager(args.cohort)
+    cohort = CohortManager(args.cohort_name)
 
     # Query to list of molregnos.
     query_dict = collections.defaultdict(list)
@@ -156,6 +154,11 @@ def build_database(args):
 
     cohort.con.commit()
 
+    if not (cohort["frozen"] == "yes"):
+        # This sample order has not been set yet, so we will set so that users
+        # can use the cohort.
+        cohort.set_samples(list(samples))
+
     info = (n_entries, len(molregnos), len(samples), len(no_matches),
             len(multiple_matches))
 
@@ -185,48 +188,51 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description=description)
 
-    parser.add_argument(
-        "filename",
-        help="File containing the pharmacotherapy data.",
-        type=str,
-    )
+    p_parser = argparse.ArgumentParser(add_help=False)
 
-    parser.add_argument(
+    group = p_parser.add_argument_group("Pharmacotherapy file options")
+    group.add_argument(
         "--sample-column",
         help="Column of the file that contains sample IDs.",
         type=str,
         required=True,
     )
 
-    parser.add_argument(
+    group.add_argument(
         "--drug-column",
         help="Column of the file that contains the drugs.",
         type=str,
         required=True,
     )
 
-    parser.add_argument(
+    group.add_argument(
         "--delim", "-d",
         help="Delimiter character.",
         type=str,
     )
 
-    parser.add_argument(
-        "--database",
-        help=("A CSV file translating queries to ChEMBL drugs. Usually, this "
-              "file is automaticlaly generated using this script."),
+    group.add_argument(
+        "filename",
+        help="File containing the pharmacotherapy data.",
         type=str,
-        default=None,
     )
 
-    parser.add_argument(
-        "--cohort",
-        help=("The name of the cohort to link the pharmacotherapy data to. "
-              "This option is used when creating the database"),
-        default=None
+    # Subparsers.
+    subparser = parser.add_subparsers(
+        dest="command",
+        help=("Either parse the pharmacotherapy file or build the cohort "
+              "manager database.")
+    )
+    subparser.required = True
+
+    # Parse the drug names from the pharmacotherapy file.
+    parse_parser = subparser.add_parser(
+        "parse",
+        help="Parse pharmacotherapy data to produce the curation file.",
+        parents=[p_parser],
     )
 
-    parser.add_argument(
+    parse_parser.add_argument(
         "--similarity-score-threshold",
         help=("Minimum similarity score threshold to identify matching drugs "
               "in ChEMBL"),
@@ -234,22 +240,40 @@ def parse_args():
         default=ds.DEFAULT_MIN_SCORE,
     )
 
-    parser.add_argument(
-        "--match-words",
-        help="Only match words and not substrings.",
-        action="store_true",
+    parse_parser.add_argument(
+        "--custom-database",
+        help=("Custom CSV database of 'name' to 'molregno'. This really needs "
+              "to be a valid CSV files as no delimiters can be provided."),
+        default=None
+    )
+
+    # Build the database.
+    build_parser = subparser.add_parser(
+        "build",
+        help="Add pharmacotherapy data to the cohort.",
+        parents=[p_parser],
+    )
+
+    build_parser.add_argument(
+        "--database",
+        help=("An excel file translating queries to ChEMBL drugs. Usually, "
+              "this file is automaticlaly generated using this script."),
+        type=str,
+        required=True,
+    )
+
+    build_parser.add_argument(
+        "--cohort-name",
+        help=("The name of the cohort to link the pharmacotherapy data to. "
+              "This option is used when creating the database"),
+        required=True,
     )
 
     args = parser.parse_args()
-    if args.database and args.cohort:
-        build_database(parser.parse_args())
-    else:
-        if args.database or args.cohort:
-            print("The --database and --cohort options need to be used "
-                  "together when ready to build the pharmacotherapy database "
-                  "for a given cohort.")
-            quit(1)
-        create_curation_file(parser.parse_args())
+    if args.command == "build":
+        build_database(args)
+    elif args.command == "parse":
+        create_curation_file(args)
 
 
 if __name__ == "__main__":
