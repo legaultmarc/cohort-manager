@@ -11,13 +11,25 @@ import os
 import sys
 import json
 import shlex
+import struct
 import sqlite3
 import readline
+import threading
 import traceback
 import argparse
+import select
+import socket
+import logging
+import webbrowser
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 import numpy as np
 import scipy.stats
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from six.moves import input
@@ -28,7 +40,7 @@ except ImportError:
     COLOR = False
 
 from cohort_manager.parser import parse_yaml
-from cohort_manager.core import CohortManager, CohortDataError
+from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
 from cohort_manager.drugs.drug_search import find_drugs_in_query
 
@@ -36,8 +48,11 @@ from cohort_manager.drugs.drug_search import find_drugs_in_query
 plt.style.use("ggplot")
 
 
+logger = logging.getLogger(__name__)
+
+
 REGISTERED_COMMANDS = {}
-STATE = {"DEBUG": False, "PAGER": True}
+STATE = {"DEBUG": False, "PAGER": True, "PREFERRED_PORT": None}
 
 
 def dispatch_command(line):
@@ -69,7 +84,7 @@ def dispatch_command(line):
     for i, arg in enumerate(line):
         line[i] = cmd.args_types[i](arg)
 
-    cmd(*line)
+    return cmd(*line)
 
 
 class REPLException(Exception):
@@ -83,19 +98,194 @@ class command(object):
             # This function takes no arguments.
             f = args[0]
             f.args_types = None
+            f.printer = DefaultPrinter()
             REGISTERED_COMMANDS[f.__name__] = f
 
         self.args_types = kwargs.get("args_types")
         self.optional = kwargs.get("optional", 0)
+        self.printer = kwargs.get("printer")
 
     def __call__(self, f):
         REGISTERED_COMMANDS[f.__name__] = f
         f.args_types = self.args_types
         f.optional = self.optional
+        f.printer = self.printer
         return f
 
 
-def main():
+class DefaultPrinter(object):
+    def __call__(self, res):
+        res = res.decode("utf-8")
+        try:
+            res = json.loads(res)
+        except Exception:
+            print(res)
+            return
+
+        if type(res) is dict:
+            message = res.get("message", "")
+        else:
+            message = False
+
+        if message:
+            print(message)
+        else:
+            print(json.dumps(res, indent=4))
+
+
+class ImagePrinter(DefaultPrinter):
+    def __call__(self, res):
+        res = json.loads(res.decode("utf-8"))
+        print("Opening generated image ('{}').".format(res["image_path"]))
+        webbrowser.open("file://" + res["image_path"])
+
+
+def _server(stop_event, headless, sock):
+    log = STATE["DEBUG"] or headless
+    try:
+        # Wait for a connection.
+        while True:
+            if stop_event.is_set():
+                # We were asked to quit by the main thread.
+                raise SystemExit
+
+            try:
+                readable, writeable, errored = select.select(
+                    [sock], [], [], 1.0
+                )
+            except OSError:
+                # Socket was closed by the main thread and we should terminate.
+                raise SystemExit
+
+            if readable:
+                break
+
+        # A client showed up so we accept the connection.
+        conn, addr = sock.accept()
+        conn.settimeout(1.0)
+        if log:
+            print("Client connected! ({}).".format(addr))
+
+        while not stop_event.is_set():
+            try:
+                # Get a command from the client.
+                command = conn.recv(4096)
+            except socket.timeout:
+                # Client sent an empty request.
+                continue
+            except ConnectionResetError:
+                # Client closed connection.
+                # TODO Prepare to handle new connection.
+                break
+
+            if not command or command == b"close\n":
+                break
+
+            # We process the received command.
+            res = _handle_command(command)
+            conn.sendall(
+                _build_msg(json.dumps(res, indent=4).encode("utf-8"))
+            )
+
+    finally:
+        if log:
+            print("Server closing.")
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _handle_command(raw_command):
+    try:
+        command = raw_command.decode("utf-8").strip()
+        res = dispatch_command(command)
+    except Exception as e:
+        # TODO log traceback.
+        logger.warning("Exception was raised when handling command.")
+        logger.warning(
+            "\nTraceback:\n" + "".join(traceback.format_tb(sys.exc_info()[2]))
+        )
+        res = {"success": False}
+        if hasattr(e, "message"):
+            res["message"] = e.message
+        else:
+            res["message"] = "{} was raised.".format(type(e).__name__)
+
+    if res is None:
+        res = {"succes": False, "message": "Empty response."}
+
+    return res
+
+
+def main(headless):
+    # Set up the server socket.
+    stop_event = threading.Event()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    if STATE["PREFERRED_PORT"] is not None:
+        sock.bind(("", STATE["PREFERRED_PORT"]))
+    else:
+        sock.bind(("", 0))
+
+    port = sock.getsockname()[1]
+    sock.listen(1)
+
+    if STATE["DEBUG"] or headless:
+        print("Server listening on port {}.".format(port))
+
+    # Launch the server thread.
+    server = threading.Thread(target=_server, daemon=False,
+                              args=(stop_event, headless, sock))
+    server.start()
+
+    try:
+        if headless:
+            # In headless mode, the only thing that the main thread will do is
+            # to wait for interrupt.
+            try:
+                while server.is_alive():
+                    pass
+            except:
+                stop_event.set()
+                return
+
+        else:
+            client(port)
+            server.join()
+
+    finally:
+        sock.close()
+
+
+def _build_msg(s):
+    """Build a message by prefixing it's length."""
+    # > means big endiang and I means unsigned int.
+    # This will use 4 bytes (see standard size in the struct docs).
+    return struct.pack(">I", len(s)) + s
+
+
+def _read_msg(sock):
+    """Read a message from an open socket."""
+    # Read the 4 bytes of message size.
+    message_length = sock.recv(4)
+    message_length = struct.unpack(">I", message_length)[0]
+
+    data = b""
+    while len(data) < message_length:
+        packet = sock.recv(4096)
+        if not packet:
+            logger.warning("Truncated message.")
+            return None
+        data += packet
+        return data
+
+
+def client(port):
+    # Built-in client for non-headless connections.
+    client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_sock.connect(("", port))
+
     while True:
         try:
             if COLOR:
@@ -103,33 +293,35 @@ def main():
             else:
                 s = "cohort repl"
 
-            line = input("[{}]> ".format(s))
+            cmd = input("[{}]> ".format(s))
+            if not cmd:
+                continue
+            if cmd == "exit":
+                raise EOFError()
 
+            # Send the command to the server.
+            client_sock.sendall(cmd.encode("utf-8"))
+
+            # Get the results printer.
+            cmd_name = shlex.split(cmd.strip())
             try:
-                dispatch_command(line)
-            except REPLException as e:
-                sys.stderr.write(e.message + "\n")
+                printer = REGISTERED_COMMANDS[cmd_name[0]].printer()
+            except Exception:
+                printer = DefaultPrinter()
+
+            # Get the response from the server.
+            res = _read_msg(client_sock)
+
+            printer(res)
 
         except KeyboardInterrupt:
             print()
-        except EOFError:
-            print()
-            break
-        except CohortDataError as e:
-            message = "\nData integrity error.\n"
-            if COLOR:
-                message = colored(message, "red")
-            print(message)
-            print(e.value)
-        except Exception as e:
-            message = "\nUnknown error occured.\n"
-            if COLOR:
-                message = colored(message, "red")
-            print("{}\n{}".format(message, e))
 
-            print("\nTraceback:")
-            if STATE["DEBUG"]:
-                traceback.print_tb(sys.exc_info()[2])
+        except EOFError:
+            print("Bye")
+            client_sock.sendall(b"close\n")
+            client_sock.close()
+            break
 
 
 def _get_manager():
@@ -158,12 +350,12 @@ def _get_data_meta(phenotype):
 
 @command
 def exit():
-    """Quit the REPL."""
-    try:
-        STATE["manager"].close()
-    except Exception:
-        pass
-    quit()
+    """Quit the REPL.
+
+    This is only available when it is not running in headless mode.
+
+    """
+    pass  # Behaviour implemented directly in main()
 
 
 @command(args_types=(str, ), optional=1)
@@ -178,26 +370,26 @@ def help(command=None):
     will be raised.
 
     """
+    message = StringIO()
     if command:
         cmd = REGISTERED_COMMANDS.get(command)
         if not cmd:
             raise REPLException(
                 "Can't show help for unknown command: '{}'".format(command)
             )
-        print(_format_long_doc(cmd))
+        print(_format_long_doc(cmd), file=message)
     else:
-        print("Available commands are:")
+        print("Available commands are:", file=message)
         longest_cmd = len(max(REGISTERED_COMMANDS, key=lambda x: len(x))) + 10
         for cmd in REGISTERED_COMMANDS:
             f = REGISTERED_COMMANDS[cmd]
-            if COLOR:
-                cmd = colored(cmd, "red")
-
             print("  {}:{space}{}".format(
                 cmd,
                 _get_short_doc(f),
                 space=" " * (longest_cmd - len(cmd))
-            ))
+            ), file=message)
+
+    return {"success": True, "message": message.getvalue()}
 
 
 @command(args_types=(str, ))
@@ -212,6 +404,9 @@ def build(yaml_filename):
     """
     STATE["manager"] = parse_yaml(yaml_filename)
     STATE["manager"].validate()
+
+    return {"success": True, "message":
+            "Loaded cohort {}.".format(yaml_filename)}
 
 
 @command(args_types=(str, ))
@@ -231,8 +426,7 @@ def sql(sql):
     except sqlite3.OperationalError as e:
         raise REPLException("Invalid SQL statement:\n{}".format(e))
 
-    for tu in manager.cur.fetchall():
-        print(tu)
+    return {"success": True, "results": manager.cur.fetchall()}
 
 
 @command
@@ -245,8 +439,12 @@ def list():
 
     """
     manager = _get_manager()
-    pager = (manager.get_number_phenotypes() > 24) and STATE["PAGER"]
-    manager.tree.pretty_print(pager)
+    message = StringIO()
+    _stdout = sys.stdout
+    sys.stdout = message
+    manager.tree.pretty_print()
+    sys.stdout = _stdout
+    return {"success": True, "message": message.getvalue()}
 
 
 @command(args_types=(str, ))
@@ -259,22 +457,23 @@ def info(phenotype):
     Use 'list' to see all the available phenotypes for this command.
 
     """
+    message = StringIO()
     data, meta = _get_data_meta(phenotype)
 
-    print("Phenotype meta data:")
+    print("Phenotype meta data:", file=message)
     for k, v in meta.items():
         if COLOR:
             k = colored(k, "green")
-        print("\t{}{}".format(k.ljust(30), v))
+        print("\t{}{}".format(k.ljust(30), v), file=message)
 
-    print("\nSummary statistics:")
+    print("\nSummary statistics:", file=message)
 
     n_missing = STATE["manager"].get_number_missing(phenotype)
     n_total = data.shape[0]
 
     print("\t{} / {} missing values ({:.3f}%)".format(
         n_missing, n_total, n_missing / n_total * 100
-    ))
+    ), file=message)
 
     if meta["variable_type"] == "discrete":
         # Show information on prevalence.
@@ -282,22 +481,26 @@ def info(phenotype):
         n_controls = np.sum(data == 0)
         print("\t{} cases, {} controls; prevalence: {:.3f}%".format(
             n_cases, n_controls, n_cases / (n_cases + n_controls) * 100
-        ))
+        ), file=message)
 
     elif meta["variable_type"] == "continuous":
         mean = np.nanmean(data)
         std = np.nanstd(data)
-        print(u"\tµ = {}, σ = {}".format(mean, std))
-        print("\tmin = {}, max = {}".format(np.nanmin(data), np.nanmax(data)))
+        print(u"\tµ = {}, σ = {}".format(mean, std), file=message)
+        print("\tmin = {}, max = {}".format(np.nanmin(data), np.nanmax(data)),
+              file=message)
 
     elif meta["variable_type"] == "factor":
-        print("\nCounts (rate):")
+        print("\nCounts (rate):", file=message)
         n = data.shape[0]
         for name, count in data.value_counts().iteritems():
-            print("\t{}: {} ({:.3f}%)".format(name, count, count / n * 100))
+            print("\t{}: {} ({:.3f}%)".format(name, count, count / n * 100),
+                  file=message)
+
+    return {"success": True, "message": message.getvalue()}
 
 
-@command(args_types=(str, ))
+@command(args_types=(str, ), printer=ImagePrinter)
 def boxplot(phenotype):
     """Draw a boxplot for the given continuous phenotype.
 
@@ -319,10 +522,22 @@ def boxplot(phenotype):
     ax.set_yticklabels([])
     ax.yaxis.set_ticks_position("none")
 
-    plt.show()
+    filename = "cohort_plot.png"
+    plt.savefig(filename, dpi=300)
+    return _response_from_img_filename(filename)
 
 
-@command(args_types=(str, str))
+def _response_from_img_filename(path):
+    plt.clf()
+    return {
+        "success": True,
+        "image_path": os.path.join(
+            os.path.abspath(""), path
+        )
+    }
+
+
+@command(args_types=(str, str), printer=ImagePrinter)
 def scatter(y, x):
     """Plot two continuous phenotypes in a scatterplot.
 
@@ -347,10 +562,13 @@ def scatter(y, x):
     plt.plot(datay[not_missing], datax[not_missing], ".", c="black", ms=2)
     plt.xlabel(x)
     plt.ylabel(y)
-    plt.show()
+    filename = "cohort_plot.png"
+    plt.savefig(filename, dpi=300)
+
+    return _response_from_img_filename(filename)
 
 
-@command(args_types=(str, int), optional=1)
+@command(args_types=(str, int), optional=1, printer=ImagePrinter)
 def histogram(phenotype, nbins=None):
     """Draw a histogram (or a bar plot for discrete variables) of the data.
 
@@ -385,10 +603,13 @@ def histogram(phenotype, nbins=None):
         plt.xticks((0.15, 0.45), ("control", "case"))
         plt.xlim((0, 0.6))
 
-    plt.show()
+    filename = "cohort_plot.png"
+    plt.savefig(filename, dpi=300)
+
+    return _response_from_img_filename(filename)
 
 
-@command(args_types=(str, ))
+@command(args_types=(str, ), printer=ImagePrinter)
 def normal_qq_plot(phenotype):
     """Plot the Normal QQ plot of the observations.
 
@@ -436,7 +657,8 @@ def normal_qq_plot(phenotype):
     plt.xlim([x_min, x_max])
     plt.ylim([y_min, y_max])
 
-    plt.show()
+    filename = "cohort_plot.png"
+    return _response_from_img_filename(filename)
 
 
 @command(args_types=(str, ))
@@ -464,6 +686,7 @@ def load(path):
 
     STATE["manager"] = CohortManager(name)
     STATE["manager"].rebuild_tree()
+    return {"success": True, "message": "Loaded cohort at '{}'.".format(path)}
 
 
 @command(args_types=(str, ))
@@ -478,6 +701,8 @@ def update(phenotype):
 
     Note that it is not possible to rename phenotypes using this function as
     it is used as the database key to access the data.
+
+    TODO. Make this better for the new (socket) REPL.
 
     """
     data, meta = _get_data_meta(phenotype)
@@ -497,11 +722,18 @@ def update(phenotype):
     # Update in db.
     _get_manager().update_phenotype(phenotype, **meta)
 
+    return {"success": True, "message": "Phenotype updated in database."}
+
 
 @command
 def validate():
     """Run data validation routine."""
     _get_manager().validate(mode="warn")
+    return {
+        "success": True,
+        "message": ("Ran validation routine (warnings have been displayed if "
+                    "necessary.)")
+    }
 
 
 @command(args_types=(str, str, str))
@@ -565,6 +797,12 @@ def virtual(name, variable_type, expression):
         )
     manager.commit()
 
+    return {
+        "success": True,
+        "message": ("Successfully created a new {} virtual variable named {}."
+                    "".format(variable_type, name))
+    }
+
 
 @command(args_types=(str, ))
 def delete(phenotype):
@@ -578,6 +816,10 @@ def delete(phenotype):
     """
     manager = _get_manager()
     manager.delete(phenotype)
+    return {
+        "success": True,
+        "message": "Deleted phenotype '{}' from database.".format(phenotype)
+    }
 
 
 @command(args_types=(int, ))
@@ -594,7 +836,7 @@ def drug_info(molregno):
 
     """
     with ChEMBL() as db:
-        print(json.dumps(db.get_drug_info(molregno), indent=4))
+        return db.get_drug_info(molregno)
 
 
 @command(args_types=(str, float), optional=1)
@@ -619,7 +861,10 @@ def drug_search(s, min_score=None):
     fields = ("molregno", "matching_name", "score")
     results = [dict(zip(fields, i)) for i in results]
 
-    print(json.dumps(results, indent=4))
+    return {
+        "success": True,
+        "hits": results
+    }
 
 
 def _get_short_doc(f):
@@ -639,8 +884,9 @@ def _get_short_doc(f):
             break
 
     if idx != -1:
-        return " ".join([i.strip() for i in s[:idx] if not i.isspace() and
-                                                       i != ""])
+        return " ".join(
+            [i.strip() for i in s[:idx] if not i.isspace() and i != ""]
+        )
 
     return s[0]
 
@@ -671,11 +917,14 @@ def entry_point():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--disable-pager", action="store_false")
+    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--port", default=None, type=int)
     args = parser.parse_args()
 
     STATE["DEBUG"] = args.debug
     STATE["PAGER"] = args.disable_pager
-    main()
+    STATE["PREFERRED_PORT"] = args.port
+    main(headless=args.headless)
 
 
 if __name__ == "__main__":

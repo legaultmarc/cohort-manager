@@ -34,7 +34,7 @@ def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
 
     # Search in custom database.
     out = []
-    if DRUG_DB["CUSTOM"]:
+    if DRUG_DB.get("CUSTOM"):
         out.extend(_match_if_score(query, DRUG_DB["CUSTOM"], min_score))
 
     # Search in preferred.
