@@ -70,16 +70,24 @@ def create_curation_file(args):
                           custom=custom)
 
     command = ("drug-db-builder build "
-               "--sample-column SAMPLE_ID "
-               "--drug-column DRUG_NAME "
+               "--delim '{delim}' "
+               "--sample-column '{sample_column}' "
+               "--drug-column '{drug_column}' "
                "--database drug_database_for_curation.xlsx "
-               "--cohort-name MY_COHORT pharmacotherapy.csv")
+               "--cohort-name MY_COHORT '{filename}'")
+
+    command = command.format(
+        sample_column=args.sample_column,
+        drug_column=args.drug_column,
+        filename=args.filename,
+        delim=args.delim if args.delim else ","
+    )
 
     print(
         "\nA file containing matches for all the queries has been generated.\n"
         "Please open '{}' using a text editor or a spreadsheet editor to:\n\n"
-        "1. Curate automatically matched drugs.\n"
-        "2. Manually fill queries that were not matched automaticall.\n"
+        "1. Manually fill queries that were not matched automatically.\n"
+        "2. Curate automatically matched drugs.\n"
         "To help you with this task, the REPL contains useful commands to "
         "search and get information on ChEMBL ('drug-search' and 'drug-info')."
         "\nWhen this process is complete, run the following command:\n\n"

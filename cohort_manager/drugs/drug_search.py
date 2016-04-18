@@ -6,6 +6,7 @@ from __future__ import division, print_function
 
 import collections
 import multiprocessing
+import operator
 import functools
 import logging
 
@@ -16,7 +17,7 @@ from .chembl import ChEMBL
 
 
 DRUG_DB = {}
-DEFAULT_MIN_SCORE = 0.9
+DEFAULT_MIN_SCORE = 0.8
 logger = logging.getLogger(__name__)
 
 
@@ -70,11 +71,26 @@ def _match_if_score(query, db, min_score):
 
 
 def _choose_hits(query, hits, keep_short=False):
-    """Choose hits that best explain the user sequence."""
+    """Choose hits that best explain the user sequence.
+
+    TODO. This technique can yield false positives if there are repetitions
+    in the query string.
+
+    e.g. 'dbname (dbname)' will try to use lower quality matches than 'dbname'
+    to explain the second part of the string.
+
+    """
     if not hits:
         return hits
 
-    hits = sorted(hits, key=lambda x: x[2], reverse=True)
+    # Sort by the distance to the query.
+    hits = sorted(hits, key=lambda x: abs(len(x[1]) - len(query)))
+
+    # Sort again with respect to score.
+    # Because sorting is guaranteed to be stable, the first store will still
+    # be useful to break ties.
+    hits = sorted(hits, key=operator.itemgetter(2), reverse=True)
+
     out = []
     explained = []
     for hit in hits:
@@ -248,6 +264,9 @@ def write_results(filename, queries, results):
     """
     writer = pd.ExcelWriter(filename)
 
+    # Count occurences for every query.
+    counts = collections.Counter(queries)
+
     # Process results to long format.
     _added = set()
     pd_results = []
@@ -257,24 +276,28 @@ def write_results(filename, queries, results):
         _added.add(queries[i])
 
         if not res:
-            pd_results.append([queries[i], "", "", "", "", ""])
+            pd_results.append([
+                queries[i], "", "", "", counts.get(queries[i], -1)
+            ])
         else:
             for tu in res:
-                pd_results.append([queries[i], *tu])
+                pd_results.append([
+                    queries[i], *tu[:3], counts.get(queries[i])
+                ])
 
     df = pd.DataFrame(
         pd_results,
-        columns=("query", "molregno", "name", "score", "left", "right"),
+        columns=("query", "molregno", "name", "score", "n_occurences"),
         dtype=str
     )
 
-    df = df[["query", "molregno", "name", "score"]]
     df = df.sort_values("query")
 
     # Write to disk.
-    df.loc[df["molregno"] == "", ["query", "molregno"]].to_excel(
-        writer, "Not Found", index=False
-    )
+    df.loc[
+        df["molregno"] == "", ["query", "molregno", "n_occurences"]
+    ].to_excel(writer, "Not Found", index=False)
+
     df.loc[df["molregno"] != "", :].to_excel(writer, "Curation", index=False)
     writer.save()
 

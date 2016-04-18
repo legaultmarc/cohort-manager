@@ -15,6 +15,7 @@ import struct
 import sqlite3
 import readline
 import threading
+import subprocess
 import traceback
 import argparse
 import select
@@ -115,11 +116,13 @@ class command(object):
 
 class DefaultPrinter(object):
     def __call__(self, res):
+        output = StringIO()
+
         res = res.decode("utf-8")
         try:
             res = json.loads(res)
         except Exception:
-            print(res)
+            print(res, file=output)
             return
 
         if type(res) is dict:
@@ -128,9 +131,24 @@ class DefaultPrinter(object):
             message = False
 
         if message:
-            print(message)
+            print(message, file=output)
         else:
-            print(json.dumps(res, indent=4))
+            print(json.dumps(res, indent=4), file=output)
+
+        n_lines = len(output.getvalue().splitlines())
+        if n_lines > 20:
+            self._pager_print(output.getvalue())
+        else:
+            print(output.getvalue())
+
+    def _pager_print(self, s):
+        try:
+            proc = subprocess.Popen(["less", ], stdin=subprocess.PIPE)
+        except Exception:
+            print(s)
+            return
+
+        proc.communicate(input=s.encode("utf-8"))
 
 
 class ImagePrinter(DefaultPrinter):
@@ -162,16 +180,16 @@ def _server(stop_event, headless, sock):
 
         # A client showed up so we accept the connection.
         conn, addr = sock.accept()
-        conn.settimeout(1.0)
         if log:
             print("Client connected! ({}).".format(addr))
 
         while not stop_event.is_set():
+            conn.settimeout(1.0)
             try:
                 # Get a command from the client.
                 command = conn.recv(4096)
             except socket.timeout:
-                # Client sent an empty request.
+                # This will happen every second.
                 continue
             except ConnectionResetError:
                 # Client closed connection.
@@ -183,9 +201,13 @@ def _server(stop_event, headless, sock):
 
             # We process the received command.
             res = _handle_command(command)
-            conn.sendall(
-                _build_msg(json.dumps(res, indent=4).encode("utf-8"))
+            message = _build_msg(
+                json.dumps(res, indent=4).encode("utf-8")
             )
+
+            # Make this blocking.
+            conn.settimeout(None)
+            conn.sendall(message)
 
     finally:
         if log:
@@ -201,16 +223,25 @@ def _handle_command(raw_command):
         command = raw_command.decode("utf-8").strip()
         res = dispatch_command(command)
     except Exception as e:
-        # TODO log traceback.
-        logger.warning("Exception was raised when handling command.")
-        logger.warning(
-            "\nTraceback:\n" + "".join(traceback.format_tb(sys.exc_info()[2]))
+        error_message = (
+            "\n{} was raised when handling command.\n"
+            "Traceback:\n{}"
         )
+        error_message = error_message.format(
+            type(e).__name__,
+            "".join(traceback.format_tb(sys.exc_info()[2]))
+        )
+
+        logger.warning(error_message)
+
         res = {"success": False}
         if hasattr(e, "message"):
             res["message"] = e.message
-        else:
-            res["message"] = "{} was raised.".format(type(e).__name__)
+        elif hasattr(e, "value"):
+            res["message"] = e.value
+        elif hasattr(e, "args"):
+            if e.args:
+                res["message"] = e.args[0]
 
     if res is None:
         res = {"succes": False, "message": "Empty response."}
@@ -278,7 +309,7 @@ def _read_msg(sock):
             logger.warning("Truncated message.")
             return None
         data += packet
-        return data
+    return data
 
 
 def client(port):
@@ -851,12 +882,12 @@ def drug_search(s, min_score=None):
     :type min_score: float
 
     """
-    if min_score:
+    if min_score is not None:
         results = find_drugs_in_query(s, min_score)
     else:
         results = find_drugs_in_query(s)
 
-    results = sorted(results, key=lambda x: x[-1], reverse=True)[:5]
+    results = sorted(results, key=lambda x: x[-1], reverse=True)
 
     fields = ("molregno", "matching_name", "score")
     results = [dict(zip(fields, i)) for i in results]

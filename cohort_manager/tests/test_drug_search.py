@@ -1,0 +1,53 @@
+import shutil
+import unittest
+import psycopg2
+
+from ..core import CohortManager
+from ..drugs import drug_search as ds
+from ..drugs.chembl import ChEMBL
+
+
+NO_CHEMBL_MESSAGE = "Local ChEMBL database not installed."
+try:
+    chembl = ChEMBL()
+    CHEMBL_INSTALLED = True
+except psycopg2.OperationalError:
+    CHEMBL_INSTALLED = False
+
+
+class TestDrugSearch(unittest.TestCase):
+    def setUp(self):
+        self.tearDown()
+        self.manager = CohortManager("_TestManager")
+
+    def tearDown(self):
+        try:
+            shutil.rmtree("_TestManager")
+        except FileNotFoundError:
+            pass
+
+    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
+    def test_find_drugs_in_query(self):
+        #                             012345678901 align from 0 to 11
+        #                             MMMMMMMMMMMM score: 12 * 3 = 36
+        res = ds.find_drugs_in_query("atorvastatin")
+        self.assertEqual(res, [(417180, "ATORVASTATIN", 36, 0, 11)])
+
+    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
+    def test_find_drugs_spell(self):
+        #                             0123456789012 align from 1 to 12
+        #                             -MMMMMXMMMMMM score: 11 * 3 - 1 = 32
+        res = ds.find_drugs_in_query("satorvzstatin")
+        self.assertEqual(res, [(417180, "ATORVASTATIN", 32, 1, 12)])
+
+    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
+    def test_find_drugs_combination(self):
+        res = ds.find_drugs_in_query("tylenol/codein")
+        self.assertTrue(16450 in [i[0] for i in res])  # Acetaminophen.
+        self.assertTrue(6167 in [i[0] for i in res])  # Codeine.
+        self.assertTrue(len(res) == 2)
+
+    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
+    def test_find_drugs_in_queries(self):
+        answers = ()
+        pass  # TODO

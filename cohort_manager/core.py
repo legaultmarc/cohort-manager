@@ -23,6 +23,7 @@ from .drugs.chembl import ChEMBL
 
 
 logger = logging.getLogger(__name__)
+VARIABLE_TYPES = {"discrete", "continuous", "factor"}
 
 
 class UnknownSamplesError(Exception):
@@ -200,6 +201,9 @@ class CohortManager(object):
         if "name" not in fields:
             raise TypeError("Expected a 'name' column (primary key).")
 
+        if "variable_type" not in fields:
+            raise TypeError("Expected a 'variable_type' column.")
+
     def __getitem__(self, key):
         self.cur.execute("SELECT * FROM app_meta WHERE key=?;", (key, ))
         element = self.cur.fetchone()
@@ -277,6 +281,12 @@ class CohortManager(object):
         self._check_phenotype_fields(kwargs.keys())
         values = map(kwargs.get, PHENOTYPE_COLUMNS)
 
+        # Check that the type is valid.
+        if kwargs["variable_type"] not in VARIABLE_TYPES:
+            raise TypeError("Unknown variable type '{}'.".format(
+                kwargs["variable_type"]
+            ))
+
         self.cur.execute(
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
@@ -339,7 +349,12 @@ class CohortManager(object):
             self.add_code(*element)
 
     def set_samples(self, samples):
-        """Set the samples IDs and order."""
+        """Set the sample IDs and order.
+
+        This can take either an ndarray of dtype np.string_ or a regular Python
+        array of str.
+
+        """
         if type(samples) is np.ndarray:
             assert np.issubdtype(samples.dtype, np.string_)
         else:
@@ -509,7 +524,12 @@ class CohortManager(object):
 
     # Get information.
     def get_samples(self):
-        """Get the ordered samples."""
+        """Get the ordered samples.
+
+        :returns: An ordered list of samples in the manager.
+        :rtype: np.ndarray
+
+        """
         cached_samples = self._cache.get("samples")
         if cached_samples is not None:
             return cached_samples
@@ -619,11 +639,11 @@ class CohortManager(object):
         counts = np.zeros((m, n)).astype(int) - 1
         counts[0, 0] = np.sum(np.isnan(v1) & np.isnan(v2))
         for i in range(m - 1):
-            counts[i+1, 0] = np.sum(np.isnan(v2) & (v1 == states[0][i]))
+            counts[i + 1, 0] = np.sum(np.isnan(v2) & (v1 == states[0][i]))
 
             for j in range(n - 1):
                 if i == 0:
-                    counts[0, j+1] = np.sum(
+                    counts[0, j + 1] = np.sum(
                         np.isnan(v1) & (v2 == states[1][j])
                     )
                 counts[i + 1, j + 1] = np.sum(
@@ -649,11 +669,10 @@ class CohortManager(object):
     def get_code(self, name):
         """Get the integer mappings for a given code.
 
-        TODO. This is inconsistent with get_phenotype which returns a dict.
-
         """
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
-        return self.cur.fetchall()
+        fields = ("key", "value")
+        return [dict(zip(fields, tu)) for tu in self.cur.fetchall()]
 
     def get_data(self, phenotype, numpy=False):
         """Get a phenotype vector.
