@@ -20,6 +20,9 @@ import logging
 import psycopg2
 
 
+from . import atc
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,15 +41,6 @@ if not DB_PASSWORD:
 
 # Data sources used for synonym search.
 _SYNONYM_SOURCES = ("USAN", "USP", "FDA", "TRADE_NAME")
-
-
-class Drug(object):
-    def __init__(self, molregno):
-        self.molregno = molregno
-        with ChEMBL() as db:
-            self.data = db.execute("SELECT * FROM molecule_dictionary WHERE "
-                                   "molregno=%s", (molregno, ))
-        print(self.data)
 
 
 class ChEMBL(object):
@@ -133,6 +127,18 @@ class ChEMBL(object):
         return list(set(self.get_preferred_drugs()) |
                     {(i[0], i[1]) for i in self.get_synonyms()})
 
+    def get_active_compound(self, molregno):
+        """Get the molregno of the active compound for a prodrug."""
+        res = self.execute(
+            "SELECT MOLREGNO, ACTIVE_MOLREGNO "
+            "FROM MOLECULE_HIERARCHY WHERE MOLREGNO=%s", (molregno, )
+        )
+        if not res:
+            return molregno
+        assert len(res) == 1
+        return res[0][1]
+
+
     def get_parent(self, molregno):
         """Get the molregno of the parent drug.
 
@@ -140,7 +146,7 @@ class ChEMBL(object):
         molregno.
         """
         molecule_hierarchy = self.execute(
-            "SELECT MOLREGNO, PARENT_MOLREGNO, ACTIVE_MOLREGNO "
+            "SELECT MOLREGNO, PARENT_MOLREGNO "
             "FROM MOLECULE_HIERARCHY WHERE MOLREGNO=%s", (molregno, )
         )
         if not molecule_hierarchy:
@@ -148,37 +154,111 @@ class ChEMBL(object):
         assert len(molecule_hierarchy) == 1
         return molecule_hierarchy[0][1]
 
+    def get_children(self, molregno):
+        """Get the molregno(s) of the children drug(s).
+
+        If the drug has no children, simply returns an empty set.
+
+        """
+        res = self.execute(
+            "SELECT MOLREGNO, PARENT_MOLREGNO "
+            "FROM MOLECULE_HIERARCHY WHERE PARENT_MOLREGNO=%s", (molregno, )
+        )
+        if not res:
+            return set()
+
+        return {i[0] for i in res if i[0] != molregno}
+
+    def get_related_drugs(self, molregno):
+        """Get drugs that are related according to the molecule hierarchy.
+
+        :param molregno: The molregno.
+        :type molregno: int
+
+        :returns: A set of related molregnos.
+        :rtype: set
+
+        """
+        res = self.execute(
+            "SELECT MOLREGNO, PARENT_MOLREGNO FROM MOLECULE_HIERARCHY "
+            "WHERE MOLREGNO=%s OR PARENT_MOLREGNO=%s", (molregno, molregno)
+        )
+        out = set()
+        for molregno, parent in res:
+            out.add(molregno)
+            out.add(parent)
+        return out
+
     def get_drugs_with_atc(self, atc_code):
+        """Returns a list of drugs with the provided ATC code.
+
+        This function is not aware of the hiarachical relationship.
+
+        A ValueError will be raised if there are no drugs with the provided
+        code.
+
+        """
         # Use ChEMBL to get a list of drugs with a matching ATC code.
-        levels = {
-            "^[ABCDGHJLMNPRSV]$": 1,
-            "^[ABCDGHJLMNPRSV][0-9]{2}$": 2,
-            "^[ABCDGHJLMNPRSV][0-9]{2}[A-Z]$": 3,
-            "^[ABCDGHJLMNPRSV][0-9]{2}[A-Z]{2}$": 4,
-            "^[ABCDGHJLMNPRSV][0-9]{2}[A-Z]{2}[0-9]{2}$": 5,
-        }
-
-        matched_level = None
-        for regex, level in levels.items():
-            if re.match(regex, atc_code.upper()):
-                matched_level = level
-
-        if not matched_level:
-            raise ValueError("Could not parse ATC code '{}'.".format(atc_code))
-
+        atc_level = atc.get_atc_code_level(atc_code)
         sql = ("SELECT mac.MOLREGNO FROM MOLECULE_ATC_CLASSIFICATION mac, "
                "ATC_CLASSIFICATION ac WHERE ac.LEVEL{level}=%s AND "
-               "mac.LEVEL5=ac.LEVEL5".format(level=matched_level))
+               "mac.LEVEL5=ac.LEVEL5".format(level=atc_level))
 
         results = self.execute(sql, (atc_code, ))
         if results:
             return [i[0] for i in results]
 
         raise ValueError("Could not find drugs with ATC code '{}' (level {})"
-                         "".format(atc_code, matched_level))
+                         "".format(atc_code, atc_level))
+
+    def get_drugs_modulating_protein(self, uniprot_id, action=None):
+        """Returns a list of drugs modulating the provided protein.
+
+        This function is not aware of the hierarchical relationship.
+
+        A ValueError will be raised if there are no drugs modulating the
+        provided target.
+
+        """
+        sql = (
+            "SELECT DISTINCT DM.MOLREGNO "
+            "FROM COMPONENT_SEQUENCES as CS "
+            " JOIN TARGET_COMPONENTS as TC "
+            "   ON CS.COMPONENT_ID=TC.COMPONENT_ID "
+            " JOIN TARGET_DICTIONARY as TD "
+            "   ON TC.TID=TD.TID "
+            " JOIN DRUG_MECHANISM as DM "
+            "   ON TD.TID=DM.TID "
+            "WHERE CS.ACCESSION=%s"
+        )
+        if action is not None:
+            sql += " AND DM.ACTION_TYPE=%s"
+            params = (uniprot_id, action)
+        else:
+            params = (uniprot_id, )
+
+        ids = self.execute(sql, params)
+        if not ids:
+            raise ValueError("Could not find any drugs modulating '{}'."
+                             "".format(uniprot_id))
+
+        return [i[0] for i in ids]
+
 
     def get_drug_info(self, molregno):
-        """Returns information on a drug."""
+        """Returns information on a drug.
+
+        :param molregno: The molregno.
+        :type molregno: int
+
+        :returns: A dict of aggregated drug information.
+        :rtype: dict
+
+        The function is used as-is for the REPL's 'drug_info' function.
+        Most fields are directly populated from the database, but others
+        are generated by querying related tables.
+
+        """
         out = collections.OrderedDict()
 
         # Get molecule information.
@@ -196,23 +276,34 @@ class ChEMBL(object):
         md_info = dict(zip(molecule_dictionary_fields, md_info))
         out["molecule_information"] = md_info
 
-        # ATC Information.
+        # ATC information.
         out["ATC"] = self._get_atc(molregno)
 
         # Mechanism information.
         out["Mechanism"] = self._get_mechanism(molregno)
 
+        # Parent information.
+        parent = self.get_parent(molregno)
+        out["parent"] = None if molregno == parent else parent
+        if out["parent"]:
+            # Inherit the ATC information.
+            out["ATC_inherited"] = self._get_atc(out["parent"])
+            del out["ATC"]
+
+        # Children information.
+        out["children"] = tuple(self.get_children(molregno))
+
         return out
 
     def _get_mechanism(self, molregno):
         # Get mechanism of action information.
-        mechanism_fields = ("Mechanism of action", "Action type",
-                            "Direct interaction", "Mechanism comment",
-                            "Selectivity comment", "Binding site comment")
+        mechanism_fields = ("mechanism_of_action", "action_type",
+                            "direct_interaction", "mechanism_comment",
+                            "selectivity_comment", "binding_site_comment")
         mechanism = self.execute(
-            "SELECT tid, mechanism_of_action, action_type, direct_interaction,"
-            "  mechanism_comment, selectivity_comment, binding_site_comment "
-            "FROM drug_mechanism WHERE molregno=%s",
+            "SELECT tid, {} FROM drug_mechanism WHERE molregno=%s".format(
+                ", ".join(mechanism_fields)
+            ),
             (molregno, )
         )
         results = []
@@ -225,8 +316,9 @@ class ChEMBL(object):
 
     def _get_atc(self, molregno):
         # Get ATC information.
-        atc_fields = ("level5", "WHO (ID)", "WHO (name)", "desc_level1",
-                      "desc_level2", "desc_level3", "desc_level4")
+        atc_fields = ("level5", "who_id", "who_name", "level1_description",
+                      "level2_description", "level3_description",
+                      "level4_description")
 
         atc = self.execute(
             "SELECT MAC.LEVEL5, AC.WHO_ID, AC.WHO_NAME,"
@@ -243,13 +335,13 @@ class ChEMBL(object):
         return results
 
     def _get_target_info(self, tid):
+        fields = ("tid", "pref_name", "organism")
         targets = self.execute(
-            "SELECT tid, pref_name, organism FROM target_dictionary "
-            "WHERE TID=%s",
+            "SELECT {} FROM target_dictionary "
+            "WHERE TID=%s".format(", ".join(fields)),
             (tid, )
         )
-        targets = [dict(zip(("TID", "Pref. name", "Organism"), t)) for
-                   t in targets]
+        targets = [dict(zip(fields, t)) for t in targets]
 
         for target_info in targets:
             target_info["components"] = self._get_target_components(tid)
@@ -257,15 +349,13 @@ class ChEMBL(object):
         return targets
 
     def _get_target_components(self, tid):
+        fields = ("component_type", "accession", "description")
         components = self.execute(
-            "SELECT cs.component_type, cs.accession, cs.description "
+            "SELECT cs.{} "
             "FROM component_sequences cs, target_components tc "
             "WHERE tc.component_id=cs.component_id AND "
-            "tc.tid=%s",
+            "tc.tid=%s".format(", cs.".join(fields)),
             (tid, )
         )
-        components = [
-            dict(zip(("Type", "Accession", "Description"), component))
-            for component in components
-        ]
+        components = [dict(zip(fields, component)) for component in components]
         return components

@@ -70,5 +70,28 @@ class TestManagerDrugs(unittest.TestCase):
         ))
 
     @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
+    def test_get_set_bad_drug_user(self):
+        self.manager.set_samples(["a", "b"])
+
+        with self.assertRaises(ValueError):
+            self.manager.register_drug_user(12345, "z")
+
+    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
     def test_get_drug_users_atc(self):
-        pass
+        self.manager.set_samples(list("ABCDEF"))
+
+        # A, C and D take different statins.
+        # A: Atorvastatin (parent): 417180
+        # C: Atorvastatin calcium (child): 407354
+        # D: Simvastatin: 138562
+        self.manager.register_drug_user(417180, "A")
+        self.manager.register_drug_user(407354, "C")
+        self.manager.register_drug_user(138562, "D")
+
+        statin = self.manager.get_drug_users_atc("C10AA")
+
+        self.assertTrue(
+            #                          A    B    C    D    E    F
+            np.all(statin == np.array([1.0, 0.0, 1.0, 1.0, 0.0, 0.0]))
+        )
+

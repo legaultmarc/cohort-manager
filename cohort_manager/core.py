@@ -294,6 +294,8 @@ class CohortManager(object):
 
     def register_drug_user(self, drug_id, sample):
         """Register that 'sample' is a user of drug 'drug_id'"""
+        if sample not in self.get_samples():
+            raise ValueError("Sample '{}' not in the manager.".format(sample))
         self.cur.execute(
             "INSERT INTO drug_users VALUES (?, ?)", (str(drug_id), sample)
         )
@@ -304,6 +306,8 @@ class CohortManager(object):
         .. todo::
             Add checks for parent and code by making sure the relationships
             hold in the database.
+
+            Also deleting the variable_type should not be allowed.
 
         """
         # Get the phenotype to make sure it exists.
@@ -559,15 +563,28 @@ class CohortManager(object):
         """Return a boolean vector similar to a phenotype vector where 1
         represents drug users.
 
+        If the sample is a user for a child or parent variable, it will be
+        marked as a user for the provided drug.
+
         """
         samples = self.get_samples()
         v = np.zeros(len(samples), dtype=bool)
+
+        # Get related drug IDs (parent or child).
+        with ChEMBL() as chembl:
+            related = chembl.get_related_drugs(drug_id)
+
+        # Get all the samples that are users of the provided drug or related
+        # drugs (e.g. parent or child).
         self.cur.execute(
-            "SELECT sample_id FROM drug_users WHERE drug_id=?", (drug_id, )
+            "SELECT sample_id FROM drug_users WHERE drug_id IN ({})".format(
+                ",".join([str(i) for i in related])
+            )
         )
+
         for sample in self.cur:
             # Get the index.
-            v[(samples == sample)] = True
+            v[samples == sample] = True
 
         if not as_bool:
             v = v.astype(float)
@@ -581,11 +598,41 @@ class CohortManager(object):
         """
         with ChEMBL() as db:
             drug_ids = db.get_drugs_with_atc(atc_code)
+        return self._build_drug_user_vector(drug_ids)
 
+    def get_drug_users_protein(self, uniprot_id, action=None):
+        """Returns a vector of drug users for drugs modulating the protein
+        represented by the provided ID.
+
+        :param uniprot_id: The Uniprot ID (e.g. P31639)
+        :type uniprot_id: str
+
+        :param action: The action type. If None, any action_type is authorized.
+                       Example action_types are: "INHIBITOR", "AGONIST" or
+                       "ANTAGONIST".
+        :type action: str
+
+        :returns: A vector of drug users.
+        :rtype: numpy.ndarray
+
+        See: http://www.uniprot.org/
+
+        """
+        with ChEMBL() as db:
+            drug_ids = db.get_drugs_modulating_protein(uniprot_id, action)
+        return self._build_drug_user_vector(drug_ids)
+
+    def _build_drug_user_vector(self, drug_ids):
+        """Builds a vector of drug users for a list of drugs.
+
+        This calls get_drug_users internally and ORs everything as this
+        function is able to identify related (parent/child) drugs and mark
+        users appropriately.
+
+        """
         v = np.zeros(self.n, dtype=bool)
         for drug_id in drug_ids:
             v |= self.get_drug_users(drug_id, as_bool=True)
-
         return v.astype(float)
 
     def filter_phenotypes(self, missing_greater=None, missing_lower=None,

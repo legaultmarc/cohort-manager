@@ -49,5 +49,29 @@ class TestDrugSearch(unittest.TestCase):
 
     @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
     def test_find_drugs_in_queries(self):
-        answers = ()
-        pass  # TODO
+        # TODO
+        return
+        queries = (
+            "LIPITOR", "CRESTOR", "COUMADIN", "SYNTHROID", "PLAVIX", "NORVASC",
+            "BISOPROLOL", "ALTACE", "METFORMIN", "METOPROLOL", "NEXIUM",
+            "ATIVAN", "ATORVASTATIN", "COVERSYL", "PANTOPRAZOLE", "ATACAND",
+            "AMLODIPINE", "FUROSEMIDE", "DIOVAN", "ATENOLOL", "ASPIRINE",
+            "ACTONEL", "IMDUR", "AVAPRO", "CELEBREX", "RAMIPRIL", "FLOMAX",
+            "GLUCOPHAGE", "CALCIUM", "LANOXIN", "COZAAR", "LOPRESSOR",
+            "MICARDIS", "LASIX", "NASONEX", "ALLOPURINOL", "AVODART",
+            "NITRO SPRAY", "SANDOZ BISOPROLOL", "LYRICA"
+        )
+
+        answers = (
+            417180, 1123018, 674830, 1376011, 598402, 418414, 27417, 189203,
+            369464, 789, 1418084, 16959, 417180, 250508, 419598, 116349,
+            418414, 2046, 139045, 1279, 1280, 494630, 263453, 421066, 18694,
+            189203, 61181, 547681, 1418072, 581814, 109797, 705951, 116949,
+            2046, 187696, 395607, 674920, 37493, 27417, 136161
+        )
+
+        results = ds.find_drugs_in_queries(queries)
+        results = ds.fix_hierarchical_matches(queries, results)
+        for i, res in enumerate(results):
+            print(answers[i], res)
+            self.assertTrue(answers[i] in [i[0] for i in res])

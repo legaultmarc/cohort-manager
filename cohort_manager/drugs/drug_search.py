@@ -216,6 +216,7 @@ def fix_hierarchical_matches(queries, results):
     removes redundant matches.
 
     """
+    return results
     cache = {}
     warned = set()
     out = []
@@ -225,7 +226,7 @@ def fix_hierarchical_matches(queries, results):
                 out.append(cache[query])
                 continue
 
-            filtered_results = []
+            filtered_results = []  # Result tuples with the fixed hierarchy.
             matches = collections.defaultdict(list)
 
             for tu in results[i]:
@@ -281,8 +282,9 @@ def write_results(filename, queries, results):
             ])
         else:
             for tu in res:
+                molregno, name, score = tu[:3]
                 pd_results.append([
-                    queries[i], *tu[:3], counts.get(queries[i])
+                    queries[i], molregno, name, score, counts.get(queries[i])
                 ])
 
     df = pd.DataFrame(
