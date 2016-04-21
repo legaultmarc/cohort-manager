@@ -287,6 +287,11 @@ class CohortManager(object):
                 kwargs["variable_type"]
             ))
 
+        # Factor variables need a code_name.
+        if kwargs["variable_type"] == "factor":
+            if kwargs.get("code_name") is None:
+                raise TypeError("Factor variables need a 'code_name'.")
+
         self.cur.execute(
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
@@ -471,7 +476,7 @@ class CohortManager(object):
             raise CohortDataError("Unknown encoding value(s) ({}) for factor "
                                   "variables '{}'.".format(extra, phenotype))
 
-    def _check_data_continuous(self, values, phenotype):
+    def _check_data_continuous(self, values, phenotype, _raise=False):
         """Check that the data vector is continuous.
 
         This is very hard to check.
@@ -500,10 +505,13 @@ class CohortManager(object):
             sample_set = set(np.random.choice(values, 5000))
 
         if len(sample_set) < 5:
-            logger.warning("The phenotype '{}' is marked as continuous, but "
-                           "it has a lot of redundancy. Perhaps it should be "
-                           "modeled as a factor or another variable type."
-                           "".format(phenotype))
+            message = ("The phenotype '{}' is marked as continuous, but "
+                       "it has a lot of redundancy. Perhaps it should be "
+                       "modeled as a factor or another variable type."
+                       "".format(phenotype))
+            if _raise:
+                raise ValueError(message)
+            logger.warning(message)  # pragma: no cover
 
         # Outlier check.
         median, mad = stats.median_absolute_deviation(
@@ -521,10 +529,13 @@ class CohortManager(object):
         most_common_outlier, count = counter.most_common(1)[0]
 
         if count >= n_outliers / 2:
-            logger.warning("The value '{}' is commonly found in the tails "
-                           "of the distribution for '{}'. This could be "
-                           "because of bad coding of missing values."
-                           "".format(most_common_outlier, phenotype))
+            message = ("The value '{}' is commonly found in the tails of the "
+                       "distribution for '{}'. This could be because of bad "
+                       "coding of missing values."
+                       "".format(most_common_outlier, phenotype))
+            if _raise:
+                raise ValueError(message)
+            logger.warning(message)  # pragma: no cover
 
     # Get information.
     def get_samples(self):
@@ -663,6 +674,7 @@ class CohortManager(object):
                 labels.append(["missing", "control", "case"])
             elif meta["variable_type"] == "factor":
                 code = self.get_code(meta["code_name"])
+
                 dims[i] = len(code) + 1
                 states.append([j[0] for j in code])
                 labels.append(["missing"] + [j[1] for j in code])
@@ -716,10 +728,15 @@ class CohortManager(object):
     def get_code(self, name):
         """Get the integer mappings for a given code.
 
+        :param name: The code name to get from the database.
+        :type name: str
+
+        :returns: A list of tuples of key, value.
+        :rtype: list:
+
         """
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
-        fields = ("key", "value")
-        return [dict(zip(fields, tu)) for tu in self.cur.fetchall()]
+        return self.cur.fetchall()
 
     def get_data(self, phenotype, numpy=False):
         """Get a phenotype vector.
@@ -749,6 +766,7 @@ class CohortManager(object):
     def _represent_factor_data(self, data, meta):
         # Get the code.
         code = self.get_code(meta["code_name"])
+
         # Check to see if the code is eligible to directly create a pandas
         # categorical variable.
         keys = [i[0] for i in code]
@@ -757,10 +775,10 @@ class CohortManager(object):
             # Recode missings for pandas convention.
             assert -1 not in keys
             data[np.isnan(data)] = -1
-            return pd.Categorical.from_codes(
+            return pd.Series(pd.Categorical.from_codes(
                 data,
                 [i[1] for i in sorted(code, key=lambda x: x[0])]
-            )
+            ))
 
         # If not, we fallback to the default constructor.
         # This is less efficient...
@@ -1144,13 +1162,21 @@ def vector_map(data, _map):
         source_dtype = float
     else:
         raise TypeError("Invalid dtype: '{}'. This function only allows "
-                        "int or float vectors.".format(data.dtype))
+                        "int or float vectors as keys.".format(data.dtype))
 
     keys = set(_map.keys())
     targets = set(_map.values())
 
     # Infer the target dtype.
-    target_dtype = set([float if np.isnan(t) else type(t) for t in targets])
+    def _safe_type(t):
+        try:
+            if np.isnan(t):
+                return float
+        except TypeError:
+            pass
+        return type(t)
+
+    target_dtype = set([_safe_type(t) for t in targets])
 
     if len(target_dtype) != 1:
         raise TypeError("Ambiguous target dtype. Make sure that the provided "
