@@ -186,6 +186,13 @@ class CohortManager(object):
             ");"
         )
 
+        self.cur.execute(
+            "CREATE TABLE dummy_phenotypes ("
+            " name TEXT PRIMARY KEY,"
+            " FOREIGN KEY(name) REFERENCES phenotypes(name)"
+            ");"
+        )
+
         self.con.commit()
 
     def _hdf5_init(self):
@@ -295,6 +302,26 @@ class CohortManager(object):
         self.cur.execute(
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
+        )
+
+    def add_dummy_phenotype(self, name):
+        """Insert a dummy phenotype into the database.
+
+        .. note::
+            The dummy phenotype is added to the "normal" phenotype table, but
+            an entry is added to the dummy_phenotype table.
+
+        """
+        # Adding the dummy phenotype to the normal phenotype table
+        self.cur.execute(
+            "INSERT INTO phenotypes (name, variable_type) VALUES (?, ?)",
+            (name, "dummy"),
+        )
+
+        # Adding the dummy phenotype to the dummy phenotype table
+        self.cur.execute(
+            "INSERT INTO dummy_phenotypes (name) VALUES (?)",
+            (name, ),
         )
 
     def register_drug_user(self, drug_id, sample):
@@ -700,9 +727,16 @@ class CohortManager(object):
         self.cur.execute("SELECT count(*) FROM phenotypes")
         return self.cur.fetchone()[0]
 
-    def get_phenotypes_list(self):
+    def get_phenotypes_list(self, dummy=False):
         """Get a list of available phenotypes from the db."""
-        self.cur.execute("SELECT name FROM phenotypes;")
+        # Creating the required SQL command
+        sql = ("SELECT a.name FROM phenotypes a"
+               " LEFT OUTER JOIN dummy_phenotypes b ON a.name=b.name"
+               " WHERE b.name IS null;")
+        if dummy:
+            sql = "SELECT name FROM phenotypes;"
+
+        self.cur.execute(sql)
         li = self.cur.fetchall()
         if li:
             li = [tu[0] for tu in li]
@@ -819,11 +853,10 @@ class CohortManager(object):
                     "in the database.")
         missing = set()
         available = set(self.data["data"].keys())
-        self.cur.execute("SELECT name FROM phenotypes")
-        for tu in self.cur:
-            name = tu[0]
+        for name in self.get_phenotypes_list():
+            print(name)
             if name not in available:
-                missing.append(name)
+                missing.add(name)
 
         if missing:
             printer("Missing data for phenotypes '{}'.".format(missing))

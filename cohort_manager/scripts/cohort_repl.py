@@ -308,16 +308,22 @@ def _get_manager():
 
 def _get_data_meta(phenotype):
     manager = _get_manager()
-    try:
-        data = manager.get_data(phenotype, numpy=True)
-    except KeyError:
-        raise REPLException("Could not find data for '{}'.".format(phenotype))
 
     meta = manager.get_phenotype(phenotype)
     if not meta:
         raise REPLException(
             "Could not find database entry for '{}'.".format(phenotype)
         )
+
+    if meta["variable_type"] == "dummy":
+        raise REPLException("Dummy phenotypes (e.g. '{}') are used only for "
+                            "organization purposes and cannot be modified or "
+                            "viewed.".format(phenotype))
+        
+    try:
+        data = manager.get_data(phenotype, numpy=True)
+    except KeyError:
+        raise REPLException("Could not find data for '{}'.".format(phenotype))
 
     return data, meta
 
