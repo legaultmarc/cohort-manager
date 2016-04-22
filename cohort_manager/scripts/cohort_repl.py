@@ -257,7 +257,7 @@ def main(headless):
 
 def client(port):
     """Built-in client for non-headless connections."""
-    con = http.client.HTTPConnection("", port)
+    con = http.client.HTTPConnection("localhost", port)
 
     while True:
         try:
