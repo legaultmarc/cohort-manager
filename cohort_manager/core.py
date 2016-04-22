@@ -186,6 +186,13 @@ class CohortManager(object):
             ");"
         )
 
+        self.cur.execute(
+            "CREATE TABLE dummy_phenotypes ("
+            " name TEXT PRIMARY KEY,"
+            " FOREIGN KEY(name) REFERENCES phenotypes(name)"
+            ");"
+        )
+
         self.con.commit()
 
     def _hdf5_init(self):
@@ -295,6 +302,26 @@ class CohortManager(object):
         self.cur.execute(
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
+        )
+
+    def add_dummy_phenotype(self, name):
+        """Insert a dummy phenotype into the database.
+
+        .. note::
+            The dummy phenotype is added to the "normal" phenotype table, but
+            an entry is added to the dummy_phenotype table.
+
+        """
+        # Adding the dummy phenotype to the normal phenotype table
+        self.cur.execute(
+            "INSERT INTO phenotypes (name, variable_type) VALUES (?, ?)",
+            (name, "dummy"),
+        )
+
+        # Adding the dummy phenotype to the dummy phenotype table
+        self.cur.execute(
+            "INSERT INTO dummy_phenotypes (name) VALUES (?)",
+            (name, ),
         )
 
     def register_drug_user(self, drug_id, sample):
@@ -553,6 +580,20 @@ class CohortManager(object):
 
         return out
 
+    def is_valid_phenotype(self, phenotype):
+        """Checks if a phenotype exists."""
+        self.cur.execute(
+            "SELECT name FROM phenotypes WHERE name=?;", (phenotype, )
+        )
+        return self.cur.fetchone() is not None
+
+    def is_dummy_phenotype(self, phenotype):
+        """Checks if a phenotype is actually a dummy phenotype."""
+        self.cur.execute(
+            "SELECT name FROM dummy_phenotypes WHERE name=?;", (phenotype, )
+        )
+        return self.cur.fetchone() is not None
+
     def get_drug_users(self, drug_id, as_bool=False):
         """Return a boolean vector similar to a phenotype vector where 1
         represents drug users.
@@ -700,9 +741,21 @@ class CohortManager(object):
         self.cur.execute("SELECT count(*) FROM phenotypes")
         return self.cur.fetchone()[0]
 
-    def get_phenotypes_list(self):
-        """Get a list of available phenotypes from the db."""
-        self.cur.execute("SELECT name FROM phenotypes;")
+    def get_phenotypes_list(self, dummy=False):
+        """Get a list of available phenotypes from the db.
+
+        :param dummy: A flag to return the dummy phenotypes or not.
+        :type dummy: bool
+
+        """
+        # Creating the required SQL command
+        sql = ("SELECT a.name FROM phenotypes a"
+               " LEFT OUTER JOIN dummy_phenotypes b ON a.name=b.name"
+               " WHERE b.name IS null;")
+        if dummy:
+            sql = "SELECT name FROM phenotypes;"
+
+        self.cur.execute(sql)
         li = self.cur.fetchall()
         if li:
             li = [tu[0] for tu in li]
@@ -780,10 +833,30 @@ class CohortManager(object):
 
     def delete(self, phenotype):
         """Remove a phenotype from the manager."""
+        # Checking the phenotype is valid
+        if not self.is_valid_phenotype(phenotype):
+            raise ValueError("Invalid phenotype '{}'. It doesn't exist in the "
+                             "database.".format(phenotype))
+
+        # Checking if the phenotype is a dummy phenotype
+        is_dummy = self.is_dummy_phenotype(phenotype)
+
+        # Deleting the entry
         self.cur.execute(
             "DELETE FROM phenotypes WHERE name=?", (phenotype, )
         )
-        del self.data["data/{}".format(phenotype)]
+
+        # Deleting the entry in the dummy phenotypes table
+        if is_dummy:
+            self.cur.execute(
+                "DELETE FROM dummy_phenotypes WHERE name=?", (phenotype, )
+            )
+
+        # Deleting the data if the phenotype is not a dummy one
+        if not is_dummy:
+            del self.data["data/{}".format(phenotype)]
+
+        # Committing
         self.commit()
 
     def validate(self, mode="raise"):
@@ -819,11 +892,9 @@ class CohortManager(object):
                     "in the database.")
         missing = set()
         available = set(self.data["data"].keys())
-        self.cur.execute("SELECT name FROM phenotypes")
-        for tu in self.cur:
-            name = tu[0]
+        for name in self.get_phenotypes_list():
             if name not in available:
-                missing.append(name)
+                missing.add(name)
 
         if missing:
             printer("Missing data for phenotypes '{}'.".format(missing))

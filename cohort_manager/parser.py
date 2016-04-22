@@ -54,6 +54,11 @@ def parse_yaml(filename):
     for code in codes:
         _handle_code_node(manager, code)
 
+    # dummy phenotypes
+    dummy_phenotypes = config.get("dummies", [])
+    for dummy in dummy_phenotypes:
+        manager.add_dummy_phenotype(dummy)
+
     # data
     data = config.get("data", [])
 

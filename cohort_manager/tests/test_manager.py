@@ -71,6 +71,17 @@ class TestManager(unittest.TestCase):
             if _type == "factor":
                 self.assertEqual(out["code_name"], "c")
 
+    def test_add_dummy_phenotype(self):
+        """Tests adding a dummy phenotype."""
+        # Inserting a dummy phenotype
+        self.manager.add_dummy_phenotype("dummy_pheno")
+
+        # Checking the variable_type
+        out = self.manager.get_phenotype("dummy_pheno")
+        self.assertEqual("dummy_pheno", out["name"])
+        self.assertEqual("dummy", out["variable_type"])
+
+
     def test_get_phenotype(self):
         """Test get missing phenotype."""
         with self.assertRaises(KeyError):
@@ -113,6 +124,52 @@ class TestManager(unittest.TestCase):
     def test_add_phenotype_bad_type(self):
         with self.assertRaises(TypeError):
             self.manager.add_phenotype(name="test", variable_type="potato")
+
+    def test_delete_phenotypes(self):
+        """Tests when deleting a phenotype."""
+        self.manager.set_samples(list("ABCDEF"))
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_phenotype(name="phenotype2",
+                                   variable_type="discrete")
+        self.manager.add_phenotype(name="phenotype3",
+                                   variable_type="continuous")
+        self.manager.add_data("phenotype1", range(6))
+
+        self.manager.delete("phenotype1")
+        self.assertFalse(self.manager.is_valid_phenotype("phenotype1"))
+
+    def test_delete_invalid_genotypes(self):
+        """Tests when deleting an invalid phenotype."""
+        with self.assertRaises(ValueError):
+            self.manager.delete("phenotype1")
+
+    def test_delete_dummy_phenotypes(self):
+        """Tests when deleting a dummy phenotype."""
+        self.manager.add_dummy_phenotype("dummy1")
+        self.manager.delete("dummy1")
+
+        self.assertFalse(self.manager.is_valid_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_dummy_phenotype("dummy1"))
+
+    def test_is_valid_phenotype(self):
+        """Tests if the phenotype is valid."""
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy1")
+
+        self.assertTrue(self.manager.is_valid_phenotype("phenotype1"))
+        self.assertTrue(self.manager.is_valid_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_valid_phenotype("phenotype2"))
+
+    def test_is_dummy_phenotype(self):
+        """Tests if the phenotype is a dummy one."""
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy1")
+
+        self.assertTrue(self.manager.is_dummy_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_dummy_phenotype("phenotype1"))
 
     def test_add_code(self):
         self.manager.add_code("a_code", 0, "value1")
@@ -461,10 +518,18 @@ class TestManager(unittest.TestCase):
                                    variable_type="discrete")
         self.manager.add_phenotype(name="phenotype3",
                                    variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy_1")
 
+        # Testing without dummies
         li = self.manager.get_phenotypes_list()
         self.assertEqual(len(li), 3)
         for phen in ("phenotype1", "phenotype2", "phenotype3"):
+            self.assertTrue(phen in li)
+
+        # Testing with dummies
+        li = self.manager.get_phenotypes_list(dummy=True)
+        self.assertEqual(len(li), 4)
+        for phen in ("phenotype1", "phenotype2", "phenotype3", "dummy_1"):
             self.assertTrue(phen in li)
 
     def test_get_data(self):
