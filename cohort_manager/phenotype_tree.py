@@ -79,7 +79,7 @@ class PhenotypeTree(object):
             print(node.data.name, file=string)
 
         for child in node.children:
-            self._pretty_print_subtree(child, string, depth=depth+1)
+            self._pretty_print_subtree(child, string, depth=depth + 1)
 
     def depth_first_traversal(self):
         stack = collections.deque(self.roots)

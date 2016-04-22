@@ -20,6 +20,7 @@ def _build_manager():
     return CohortManager("_TestManager")
 
 
+@unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
 class TestManagerDrugs(unittest.TestCase):
     def setUp(self):
         self.tearDown()
@@ -69,14 +70,12 @@ class TestManagerDrugs(unittest.TestCase):
             np.array([1, 1, 0]) == v
         ))
 
-    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
     def test_get_set_bad_drug_user(self):
         self.manager.set_samples(["a", "b"])
 
         with self.assertRaises(ValueError):
             self.manager.register_drug_user(12345, "z")
 
-    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
     def test_get_drug_users_atc(self):
         self.manager.set_samples(list("ABCDEF"))
 
@@ -95,7 +94,6 @@ class TestManagerDrugs(unittest.TestCase):
             np.all(statin == np.array([1.0, 0.0, 1.0, 1.0, 0.0, 0.0]))
         )
 
-    @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
     def test_get_drug_users_protein(self):
         """Test getting drug users from protein ID."""
         self.manager.set_samples(list("ABCDEF"))

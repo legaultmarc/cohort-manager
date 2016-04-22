@@ -18,7 +18,7 @@ import pandas as pd
 from six.moves import range
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
-from . import stats
+from . import inference
 from .drugs.chembl import ChEMBL
 
 
@@ -498,13 +498,9 @@ class CohortManager(object):
         values = values[~np.isnan(values)]
 
         # Factor check.
-        # Sample up to 5000 samples to see the number of distinct values.
-        if values.shape[0] > 5000:
-            sample_set = set(values)
-        else:
-            sample_set = set(np.random.choice(values, 5000))
+        n_values = inference.estimate_num_distinct(values)
 
-        if len(sample_set) < 5:
+        if n_values < 5:
             message = ("The phenotype '{}' is marked as continuous, but "
                        "it has a lot of redundancy. Perhaps it should be "
                        "modeled as a factor or another variable type."
@@ -514,25 +510,12 @@ class CohortManager(object):
             logger.warning(message)  # pragma: no cover
 
         # Outlier check.
-        median, mad = stats.median_absolute_deviation(
-            values, return_median=True
-        )
-        outliers = values[
-            (values < median - 3 * mad) | (values > median + 3 * mad)
-        ]
-
-        n_outliers = outliers.shape[0]
-        if n_outliers <= 5:
-            return
-
-        counter = collections.Counter(outliers)
-        most_common_outlier, count = counter.most_common(1)[0]
-
-        if count >= n_outliers / 2:
+        common_outlier = inference.find_overrepresented_outlier(values)
+        if common_outlier is not None:
             message = ("The value '{}' is commonly found in the tails of the "
                        "distribution for '{}'. This could be because of bad "
                        "coding of missing values."
-                       "".format(most_common_outlier, phenotype))
+                       "".format(common_outlier, phenotype))
             if _raise:
                 raise ValueError(message)
             logger.warning(message)  # pragma: no cover
@@ -896,8 +879,8 @@ class CohortManager(object):
         NA in the HDF5 container.
 
         .. warning::
-            This does not take into account arbitrary factor values values to
-            identify unaffected individuals.
+            This does not take into account arbitrary factor values to identify
+            unaffected individuals.
 
         """
         # Find the node from it's root.

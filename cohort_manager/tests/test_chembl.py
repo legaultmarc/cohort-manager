@@ -12,6 +12,7 @@ except psycopg2.OperationalError:
     CHEMBL_INSTALLED = False
 
 
+@unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
 class TestChEMBL(unittest.TestCase):
     def test_get_related_drugs(self):
         with ChEMBL() as db:

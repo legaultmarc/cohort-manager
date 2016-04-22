@@ -11,17 +11,17 @@ import os
 import sys
 import json
 import shlex
-import struct
 import sqlite3
 import readline
 import threading
 import subprocess
+import http
+import http.server
+import webbrowser
 import traceback
 import argparse
-import select
-import socket
 import logging
-import webbrowser
+
 try:
     from StringIO import StringIO
 except ImportError:
@@ -54,6 +54,32 @@ logger = logging.getLogger(__name__)
 
 REGISTERED_COMMANDS = {}
 STATE = {"DEBUG": False, "PAGER": True, "PREFERRED_PORT": None}
+
+
+class CohortManagerRequestHandler(http.server.BaseHTTPRequestHandler):
+    """Minimalist HTTP server to run the REPL commands."""
+    def do_POST(self):
+        message_length = int(self.headers["Content-Length"])
+        message = self.rfile.read(message_length)
+
+        # Handle the command.
+        response = _handle_command(message)
+        try:
+            payload = json.dumps(response)
+        except json.decoder.JSONDecodeError:
+            payload = str(response)
+
+        self.send_200()
+        self.wfile.write(payload.encode("utf-8"))
+
+    def send_200(self):
+        self.send_response(http.HTTPStatus.OK)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+
+    def log_message(self, *args):
+        """Silence messages."""
+        return
 
 
 def dispatch_command(line):
@@ -158,66 +184,6 @@ class ImagePrinter(DefaultPrinter):
         webbrowser.open("file://" + res["image_path"])
 
 
-def _server(stop_event, headless, sock):
-    log = STATE["DEBUG"] or headless
-    try:
-        # Wait for a connection.
-        while True:
-            if stop_event.is_set():
-                # We were asked to quit by the main thread.
-                raise SystemExit
-
-            try:
-                readable, writeable, errored = select.select(
-                    [sock], [], [], 1.0
-                )
-            except OSError:
-                # Socket was closed by the main thread and we should terminate.
-                raise SystemExit
-
-            if readable:
-                break
-
-        # A client showed up so we accept the connection.
-        conn, addr = sock.accept()
-        if log:
-            print("Client connected! ({}).".format(addr))
-
-        while not stop_event.is_set():
-            conn.settimeout(1.0)
-            try:
-                # Get a command from the client.
-                command = conn.recv(4096)
-            except socket.timeout:
-                # This will happen every second.
-                continue
-            except ConnectionResetError:
-                # Client closed connection.
-                # TODO Prepare to handle new connection.
-                break
-
-            if not command or command == b"close\n":
-                break
-
-            # We process the received command.
-            res = _handle_command(command)
-            message = _build_msg(
-                json.dumps(res, indent=4).encode("utf-8")
-            )
-
-            # Make this blocking.
-            conn.settimeout(None)
-            conn.sendall(message)
-
-    finally:
-        if log:
-            print("Server closing.")
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-
 def _handle_command(raw_command):
     try:
         command = raw_command.decode("utf-8").strip()
@@ -250,72 +216,48 @@ def _handle_command(raw_command):
 
 
 def main(headless):
-    # Set up the server socket.
-    stop_event = threading.Event()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    port = STATE.get("PREFERRED_PORT")
+    if not port:
+        port = 8000
 
-    if STATE["PREFERRED_PORT"] is not None:
-        sock.bind(("", STATE["PREFERRED_PORT"]))
-    else:
-        sock.bind(("", 0))
-
-    port = sock.getsockname()[1]
-    sock.listen(1)
+    httpd = http.server.HTTPServer(
+        ("", port),
+        CohortManagerRequestHandler
+    )
 
     if STATE["DEBUG"] or headless:
         print("Server listening on port {}.".format(port))
 
     # Launch the server thread.
-    server = threading.Thread(target=_server, daemon=False,
-                              args=(stop_event, headless, sock))
+    server = threading.Thread(target=httpd.serve_forever, daemon=False)
     server.start()
 
-    try:
-        if headless:
-            # In headless mode, the only thing that the main thread will do is
-            # to wait for interrupt.
-            try:
-                while server.is_alive():
-                    pass
-            except:
-                stop_event.set()
-                return
+    if headless:
+        # In headless mode, the only thing that the main thread will do is
+        # to wait for interrupt.
+        try:
+            while server.is_alive():
+                pass
+        except:
+            httpd.shutdown()
+            return
 
-        else:
+    else:
+        try:
             client(port)
-            server.join()
+        except EOFError:
+            print("YO")
+            httpd.shutdown()
+        except KeyboardInterrupt:
+            print("Ya")
 
-    finally:
-        sock.close()
-
-
-def _build_msg(s):
-    """Build a message by prefixing it's length."""
-    # > means big endiang and I means unsigned int.
-    # This will use 4 bytes (see standard size in the struct docs).
-    return struct.pack(">I", len(s)) + s
-
-
-def _read_msg(sock):
-    """Read a message from an open socket."""
-    # Read the 4 bytes of message size.
-    message_length = sock.recv(4)
-    message_length = struct.unpack(">I", message_length)[0]
-
-    data = b""
-    while len(data) < message_length:
-        packet = sock.recv(4096)
-        if not packet:
-            logger.warning("Truncated message.")
-            return None
-        data += packet
-    return data
+        httpd.shutdown()
+        server.join()
 
 
 def client(port):
-    # Built-in client for non-headless connections.
-    client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_sock.connect(("", port))
+    """Built-in client for non-headless connections."""
+    con = http.client.HTTPConnection("", port)
 
     while True:
         try:
@@ -331,7 +273,8 @@ def client(port):
                 raise EOFError()
 
             # Send the command to the server.
-            client_sock.sendall(cmd.encode("utf-8"))
+            con.request("POST", "/", cmd.encode("utf-8"),
+                        headers={"Content-Type": "text/plain"})
 
             # Get the results printer.
             cmd_name = shlex.split(cmd.strip())
@@ -341,7 +284,10 @@ def client(port):
                 printer = DefaultPrinter()
 
             # Get the response from the server.
-            res = _read_msg(client_sock)
+            res = con.getresponse()
+            if res.status != 200:
+                print("Request failed.")
+            res = res.read()
 
             printer(res)
 
@@ -349,9 +295,6 @@ def client(port):
             print()
 
         except EOFError:
-            print("Bye")
-            client_sock.sendall(b"close\n")
-            client_sock.close()
             break
 
 
@@ -720,8 +663,8 @@ def load(path):
     return {"success": True, "message": "Loaded cohort at '{}'.".format(path)}
 
 
-@command(args_types=(str, ))
-def update(phenotype):
+@command(args_types=(str, dict), optional=1)
+def update(phenotype, new_data):
     """Update the metadata for a given phenotype.
 
     :param phenotype: The phenotype for which the metadata will be updated.
@@ -733,7 +676,7 @@ def update(phenotype):
     Note that it is not possible to rename phenotypes using this function as
     it is used as the database key to access the data.
 
-    TODO. Make this better for the new (socket) REPL.
+    TODO. Make this better for the new client/server architecture.
 
     """
     data, meta = _get_data_meta(phenotype)
