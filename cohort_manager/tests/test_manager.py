@@ -71,6 +71,17 @@ class TestManager(unittest.TestCase):
             if _type == "factor":
                 self.assertEqual(out["code_name"], "c")
 
+    def test_add_dummy_phenotype(self):
+        """Tests adding a dummy phenotype."""
+        # Inserting a dummy phenotype
+        self.manager.add_dummy_phenotype("dummy_pheno")
+
+        # Checking the variable_type
+        out = self.manager.get_phenotype("dummy_pheno")
+        self.assertEqual("dummy_pheno", out["name"])
+        self.assertEqual("dummy", out["variable_type"])
+
+
     def test_get_phenotype(self):
         """Test get missing phenotype."""
         with self.assertRaises(KeyError):
@@ -461,10 +472,18 @@ class TestManager(unittest.TestCase):
                                    variable_type="discrete")
         self.manager.add_phenotype(name="phenotype3",
                                    variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy_1")
 
+        # Testing without dummies
         li = self.manager.get_phenotypes_list()
         self.assertEqual(len(li), 3)
         for phen in ("phenotype1", "phenotype2", "phenotype3"):
+            self.assertTrue(phen in li)
+
+        # Testing with dummies
+        li = self.manager.get_phenotypes_list(dummy=True)
+        self.assertEqual(len(li), 4)
+        for phen in ("phenotype1", "phenotype2", "phenotype3", "dummy_1"):
             self.assertTrue(phen in li)
 
     def test_get_data(self):
