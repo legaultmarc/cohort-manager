@@ -580,6 +580,20 @@ class CohortManager(object):
 
         return out
 
+    def is_valid_phenotype(self, phenotype):
+        """Checks if a phenotype exists."""
+        self.cur.execute(
+            "SELECT name FROM phenotypes WHERE name=?;", (phenotype, )
+        )
+        return self.cur.fetchone() is not None
+
+    def is_dummy_phenotype(self, phenotype):
+        """Checks if a phenotype is actually a dummy phenotype."""
+        self.cur.execute(
+            "SELECT name FROM dummy_phenotypes WHERE name=?;", (phenotype, )
+        )
+        return self.cur.fetchone() is not None
+
     def get_drug_users(self, drug_id, as_bool=False):
         """Return a boolean vector similar to a phenotype vector where 1
         represents drug users.
@@ -819,10 +833,30 @@ class CohortManager(object):
 
     def delete(self, phenotype):
         """Remove a phenotype from the manager."""
+        # Checking the phenotype is valid
+        if not self.is_valid_phenotype(phenotype):
+            raise ValueError("Invalid phenotype '{}'. It doesn't exist in the "
+                             "database.".format(phenotype))
+
+        # Checking if the phenotype is a dummy phenotype
+        is_dummy = self.is_dummy_phenotype(phenotype)
+
+        # Deleting the entry
         self.cur.execute(
             "DELETE FROM phenotypes WHERE name=?", (phenotype, )
         )
-        del self.data["data/{}".format(phenotype)]
+
+        # Deleting the entry in the dummy phenotypes table
+        if is_dummy:
+            self.cur.execute(
+                "DELETE FROM dummy_phenotypes WHERE name=?", (phenotype, )
+            )
+
+        # Deleting the data if the phenotype is not a dummy one
+        if not is_dummy:
+            del self.data["data/{}".format(phenotype)]
+
+        # Committing
         self.commit()
 
     def validate(self, mode="raise"):
@@ -859,7 +893,6 @@ class CohortManager(object):
         missing = set()
         available = set(self.data["data"].keys())
         for name in self.get_phenotypes_list():
-            print(name)
             if name not in available:
                 missing.add(name)
 
