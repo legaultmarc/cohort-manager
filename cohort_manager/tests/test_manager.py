@@ -90,7 +90,7 @@ class TestManager(unittest.TestCase):
             "parent": "parent",
             "variable_type": "factor",
             "crf_page": 3,
-            "question": "What is your favorite animal?",
+            "description": "Favorite animal",
             "code_name": "c",
         }
         self.manager.add_phenotype(**params)
