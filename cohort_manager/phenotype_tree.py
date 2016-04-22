@@ -20,7 +20,7 @@ from six import StringIO as StringIO
 
 
 PHENOTYPE_COLUMNS = ("name", "icd10", "parent", "variable_type", "crf_page",
-                     "question", "code_name")
+                     "description", "code_name")
 
 
 NodeData = collections.namedtuple("NodeData", PHENOTYPE_COLUMNS)

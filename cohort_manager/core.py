@@ -155,7 +155,7 @@ class CohortManager(object):
             " parent TEXT,"
             " variable_type TEXT NOT NULL,"
             " crf_page INTEGER,"
-            " question TEXT,"
+            " description TEXT,"
             " code_name TEXT,"
             " FOREIGN KEY(parent) REFERENCES phenotypes(name)"
             ");"
@@ -271,7 +271,7 @@ class CohortManager(object):
             - parent
             - variable_type
             - crf_page
-            - question
+            - description
             - code_name
 
         .. todo::
