@@ -728,7 +728,12 @@ class CohortManager(object):
         return self.cur.fetchone()[0]
 
     def get_phenotypes_list(self, dummy=False):
-        """Get a list of available phenotypes from the db."""
+        """Get a list of available phenotypes from the db.
+
+        :param dummy: A flag to return the dummy phenotypes or not.
+        :type dummy: bool
+
+        """
         # Creating the required SQL command
         sql = ("SELECT a.name FROM phenotypes a"
                " LEFT OUTER JOIN dummy_phenotypes b ON a.name=b.name"
