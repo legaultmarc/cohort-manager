@@ -663,8 +663,8 @@ def load(path):
     return {"success": True, "message": "Loaded cohort at '{}'.".format(path)}
 
 
-@command(args_types=(str, dict), optional=1)
-def update(phenotype, new_data):
+@command(args_types=(str, ))
+def update(phenotype):
     """Update the metadata for a given phenotype.
 
     :param phenotype: The phenotype for which the metadata will be updated.

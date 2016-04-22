@@ -103,7 +103,7 @@ data:
           map: &yesNoNa [[1, 1.0], [2, 0.0], [9, "nan"], [-99, "nan"], [-88, "nan"]]
           type: discrete
           crf_page: 16
-          question: "History of Palpitations"
+          description: "History of Palpitations"
 
         - column: PalpFreq
           name: "Palpitations frequency"  # Maybe rename
@@ -111,7 +111,7 @@ data:
           code: *codeFreq
           type: factor
           crf_page: 16
-          question: "Palpitations: Frequency"
+          description: "Palpitations: Frequency"
 
         - column: Faint
           name: Fainting 
@@ -119,7 +119,7 @@ data:
           map: *yesNoNa
           type: discrete
           crf_page: 16
-          question: "History of Fainting"
+          description: "History of Fainting"
 
         - column: FaintAge
           parent: Fainting
@@ -127,7 +127,7 @@ data:
           type: continuous
           map: &positiveInteger [[-9, "nan"], [0, "nan"]]
           crf_page: 16
-          question: "Age at first episode (lifetime)"
+          description: "Age at first episode (lifetime)"
 
         - column: Arrest
           name: HistoryOfCardiacArrest
@@ -135,14 +135,14 @@ data:
           map: *yesNoNa
           type: discrete
           crf_page: 16
-          question: "History of cardiac arrest"
+          description: "History of cardiac arrest"
 
         - column: Arrh
           name: &arrh HistoryOfArrhythmia
           map: *yesNoNa
           type: discrete
           crf_page: 17
-          question: "History of arrhythmia"
+          description: "History of arrhythmia"
 
         - column: ArrhAge
           name: AgeAtFirstArrhythmia
@@ -150,7 +150,7 @@ data:
           type: continuous
           map: *positiveInteger
           crf_page: 17
-          question: "Arrhythmia: Age at first episode (years old)"
+          description: "Arrhythmia: Age at first episode (years old)"
 
         - column: ArrhYear
           name: YearOfLastArrhymia
@@ -158,7 +158,7 @@ data:
           type: continuous
           map: *positiveInteger
           crf_page: 17
-          question: "Arrhythmia: Year of most recent episode"
+          description: "Arrhythmia: Year of most recent episode"
 
         - column: Afib
           name: &afib AtrialFibrillation
@@ -167,7 +167,7 @@ data:
           map: *yesNoNa
           icd10: I48
           crf_page: 17
-          question: "History of Atrial Fibrillation (AFib)"
+          description: "History of Atrial Fibrillation (AFib)"
 
         - column: AfibType
           name: AtrialFibrillationType
@@ -175,7 +175,7 @@ data:
           type: factor
           code: *codeAFib
           crf_page: 17
-          question: "AFib: Select type"
+          description: "AFib: Select type"
 
         - column: AfibYear
           name: YearOfLastAtrialFibrillation
@@ -183,7 +183,7 @@ data:
           type: continuous
           map: *positiveInteger
           crf_page: 17
-          question: "AFib: Year of last documented episode"
+          description: "AFib: Year of last documented episode"
 
         - column: Supra
           name: &svt SupraventricularTachycardia
@@ -192,14 +192,14 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of Supraventricular Tachycardia (SVT)"
+          description: "History of Supraventricular Tachycardia (SVT)"
 
         - column: SupraAV
           name: AtrioventricularNodalReentrantTachycardia
           parent: *svt
           type: discrete
           crf_page: 17
-          question: "SVT: Multiple choice - AVNRT (AV Nodal Reentry Tachycardia)"
+          description: "SVT: Multiple choice - AVNRT (AV Nodal Reentry Tachycardia)"
 
         - column: SupraAP
           name: WolffParkinsonWhite
@@ -207,7 +207,7 @@ data:
           map: [[2, 1]]
           type: discrete
           crf_page: 17
-          question: "SVT: Multiple choice - Accessory Pathway (Wolff-Parkinson-White)"
+          description: "SVT: Multiple choice - Accessory Pathway (Wolff-Parkinson-White)"
 
         - column: SupraAT
           name: AtrialTachycardia
@@ -215,7 +215,7 @@ data:
           map: [[3, 1]]
           type: discrete
           crf_page: 17
-          question: "SVT: Multiple choice - Atrial Tachycardia"
+          description: "SVT: Multiple choice - Atrial Tachycardia"
 
         - column: SupraOther
           name: OtherSupraventricularTachycardia
@@ -223,7 +223,7 @@ data:
           map: [[4, 1]]
           type: discrete
           crf_page: 17
-          question: "SVT: Multiple choice - Other mechanism"
+          description: "SVT: Multiple choice - Other mechanism"
 
         - column: Flutter
           name: AtrialFlutter
@@ -232,7 +232,7 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of Atrial Flutter"
+          description: "History of Atrial Flutter"
 
         - column: Ventr
           name: VencticularTachycardia
@@ -241,7 +241,7 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of Ventricular Tachycardia/Fibrillation"
+          description: "History of Ventricular Tachycardia/Fibrillation"
 
         - column: SSinus
           name: SickSinusSyndrome
@@ -250,7 +250,7 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of Sick Sinus Syndrome"
+          description: "History of Sick Sinus Syndrome"
 
         - column: AVBlock
           name: AtrioventricularBlock
@@ -259,7 +259,7 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of AV Block"
+          description: "History of AV Block"
 
         - column: ArrhOther
           name: OtherArrhythmia
@@ -267,7 +267,7 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 17
-          question: "History of Other Arrhythmia"
+          description: "History of Other Arrhythmia"
 
         # Page 18
         - column: ArrhTx
@@ -275,14 +275,14 @@ data:
           type: discrete
           map: *yesNoNa
           crf_page: 18
-          question: "History of Arrhythmia Treatment"
+          description: "History of Arrhythmia Treatment"
 
         - column: ArrhTxPace
           name: Pacemaker
           parent: *arrhTx
           type: discrete
           crf_page: 18
-          question: "Treatment: Multiple choice - Pacemaker"
+          description: "Treatment: Multiple choice - Pacemaker"
 
         - column: ArrhTxPaceYear
           name: PacemakerYear
@@ -290,7 +290,7 @@ data:
           type: continuous
           map: *positiveInteger
           crf_page: 18
-          question: "Treatment: Multiple choice - Pacemaker Year"
+          description: "Treatment: Multiple choice - Pacemaker Year"
 
         - column: ArrhTxImpl
           name:  ImplantableCardiovertorDefibrillator  # Mistake in dictionary.
@@ -298,7 +298,7 @@ data:
           map: [[2, 1]]
           type: discrete
           crf_page: 18
-          question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator"
+          description: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator"
 
         - column: ArrhTxImplYear
           name: ImplCardiovertorDefib
@@ -306,7 +306,7 @@ data:
           type: continuous
           map: *positiveInteger
           crf_page: 18
-          question: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator Year"
+          description: "Treatment: Multiple choice - Implantable Cardiovertor Debribrillator Year"
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/VS.txt"
       encoding: "ISO-8859-1"
@@ -367,13 +367,13 @@ data:
           - column: EnrollAge
             name: EnrollAge
             map: *positiveInteger
-            question: "Subject age at enroll date"
+            description: "Subject age at enroll date"
             type: continuous
 
           - column: CurrentAge
             name: CurrentAge
             map: *positiveInteger
-            question: "Subject age at date of data extraction"
+            description: "Subject age at date of data extraction"
             type: continuous
 
           - column: Gender
@@ -421,12 +421,12 @@ data:
           - column: AncestryFrCanadian
             name: AncestryFrenchCanadian
             map: [[-88, "nan"], [-77, "nan"], [-99, "nan"]]
-            question: "Ancestry: French canadian"
+            description: "Ancestry: French canadian"
             type: discrete
 
           - column: ConsentProject
             name: ContactForProjectConsent
-            question: "Consent: Contact for project"
+            description: "Consent: Contact for project"
             type: discrete
 
     - filename: "/Users/legaultmarc/data/mhi_biobank/phenotypes/csv/CVHx.txt"
@@ -440,75 +440,75 @@ data:
           # MI
           - column: PrevMI
             name: &previousMI PreviousMyocardialInfarction
-            question: "Previous MI"
+            description: "Previous MI"
             type: discrete
             map: *yesNoNa
 
           - column: PrevMINbr
             name: NumberOfPreviousMI
             parent: *previousMI
-            question: "Previous MI: Number of MIs"
+            description: "Previous MI: Number of MIs"
             code: *oneTwoThreeMore
             type: factor
 
           - column: PrevMIAge
             name: AgeAtFirstMI
             parent: *previousMI
-            question: "Previous MI: Age at first MI"
+            description: "Previous MI: Age at first MI"
             map: *positiveInteger
             type: continuous
 
           - column: PrevMIYear
             name: YearOfLastMI
             parent: *previousMI
-            question: "Previous MI: Year of last MI"
+            description: "Previous MI: Year of last MI"
             map: *positiveInteger
             type: continuous
 
           # PCI
           - column: PrevPCI
             name: &previousPCI PreviousPCI
-            question: "Angioplastie coronarienne transluminale percutanée"
+            description: "Angioplastie coronarienne transluminale percutanée"
             type: discrete
             map: *yesNoNa
 
           - column: PrevPCINbr
             name: NumberOfPreviousPCI
             parent: *previousPCI
-            question: "Previous PCI: Number of PCIs"
+            description: "Previous PCI: Number of PCIs"
             code: *oneTwoThreeMore
             type: factor
 
           - column: PrevPCIAge
             name: AgeAtFirstPCI
             parent: *previousPCI
-            question: "Previous PCI: Age at first PCI"
+            description: "Previous PCI: Age at first PCI"
             map: *positiveInteger
             type: continuous
 
           - column: PrevPCIYear
             name: YearOfLastPCI
             parent: *previousPCI
-            question: "Previous PCI: Year of last PCI"
+            description: "Previous PCI: Year of last PCI"
             map: *positiveInteger
             type: continuous
 
           # Angina
           - column: Angina
             name: AnginaHistory
-            question: "Angina lifetime"
+            description: "Angina lifetime"
             type: discrete
             map: *yesNoNa
 
           - column: AnginaPresent
             name: &anginaPresent AnginaPresent
-            question: "Angina present"
+            description: "Angina present"
             type: discrete
 
           - column: AnginaClass
             name: AnginaClass
             parent: *anginaPresent
-            question: "Angina class"
+            description: "Angina class"
             map: [[9, "nan"]]
             code: ANGCHFclass
             type: factor
@@ -517,12 +517,12 @@ data:
             name: AnginaUnstable
             map: *yesNoNa
             type: discrete
-            question: "Angina unstable"
+            description: "Angina unstable"
 
           # Stroke
           - column: StrokeTIA
             name: &strokeTIA StrokeTIA
-            question: "Stroke or transient ischemic accident" # FIXME verify
+            description: "Stroke or transient ischemic accident" # FIXME verify
             map: *yesNoNa
             type: discrete
 
@@ -531,35 +531,35 @@ data:
             parent: *strokeTIA
             code: *oneTwoThreeMore
             type: factor
-            question: "Stroke/TIA: Number of strokes/TIA"
+            description: "Stroke/TIA: Number of strokes/TIA"
 
           - column: StrokeAge
             parent: *strokeTIA
             name: StrokeFirstAge
             type: continuous
             map: *positiveInteger
-            question: "Stroke/TIA: Age at first stroke"
+            description: "Stroke/TIA: Age at first stroke"
 
           - column: StrokeYear
             name: StrokeLastYear
             parent: *strokeTIA
             type: continuous
             map: *positiveInteger
-            question: "Stroke/TIA: Year of last stroke/TIA"
+            description: "Stroke/TIA: Year of last stroke/TIA"
 
           # CHF
           - column: CHF
             name: &chf CongestiveHeartFailureHistory
             type: discrete
             map: *yesNoNa
-            question: "Congestive heart failure (CHF)"
+            description: "Congestive heart failure (CHF)"
 
           - column: CHFCurrent
             name: &CHFCurrent CHFCurrent
             parent: *chf
             type: discrete
             map: *yesNoNa
-            question: "CHF: Current"
+            description: "CHF: Current"
 
           - column: CHFClass
             name: CHFClass
