@@ -295,6 +295,7 @@ def client(port):
             print()
 
         except EOFError:
+            print("Bye")
             break
 
 
