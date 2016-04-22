@@ -125,6 +125,52 @@ class TestManager(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.manager.add_phenotype(name="test", variable_type="potato")
 
+    def test_delete_phenotypes(self):
+        """Tests when deleting a phenotype."""
+        self.manager.set_samples(list("ABCDEF"))
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_phenotype(name="phenotype2",
+                                   variable_type="discrete")
+        self.manager.add_phenotype(name="phenotype3",
+                                   variable_type="continuous")
+        self.manager.add_data("phenotype1", range(6))
+
+        self.manager.delete("phenotype1")
+        self.assertFalse(self.manager.is_valid_phenotype("phenotype1"))
+
+    def test_delete_invalid_genotypes(self):
+        """Tests when deleting an invalid phenotype."""
+        with self.assertRaises(ValueError):
+            self.manager.delete("phenotype1")
+
+    def test_delete_dummy_phenotypes(self):
+        """Tests when deleting a dummy phenotype."""
+        self.manager.add_dummy_phenotype("dummy1")
+        self.manager.delete("dummy1")
+
+        self.assertFalse(self.manager.is_valid_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_dummy_phenotype("dummy1"))
+
+    def test_is_valid_phenotype(self):
+        """Tests if the phenotype is valid."""
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy1")
+
+        self.assertTrue(self.manager.is_valid_phenotype("phenotype1"))
+        self.assertTrue(self.manager.is_valid_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_valid_phenotype("phenotype2"))
+
+    def test_is_dummy_phenotype(self):
+        """Tests if the phenotype is a dummy one."""
+        self.manager.add_phenotype(name="phenotype1",
+                                   variable_type="continuous")
+        self.manager.add_dummy_phenotype("dummy1")
+
+        self.assertTrue(self.manager.is_dummy_phenotype("dummy1"))
+        self.assertFalse(self.manager.is_dummy_phenotype("phenotype1"))
+
     def test_add_code(self):
         self.manager.add_code("a_code", 0, "value1")
         self.manager.add_code("a_code", 1, "value2")
