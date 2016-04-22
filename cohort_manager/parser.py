@@ -245,7 +245,7 @@ def _handle_variable_node(manager, node, data):
     crf_page = node.get("crf_page")
     if crf_page:
         crf_page = int(crf_page)
-    question = node.get("question")
+    description = node.get("description")
 
     # For factors, a code is required.
     if _type == "factor" and code is None:
@@ -300,7 +300,7 @@ def _handle_variable_node(manager, node, data):
         parent=parent,
         variable_type=_type,
         crf_page=crf_page,
-        question=question,
+        description=description,
         code_name=code
     )
 
