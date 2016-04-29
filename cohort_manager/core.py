@@ -4,6 +4,7 @@
 from __future__ import division
 
 import collections
+import operator
 import itertools
 import logging
 import sqlite3
@@ -326,10 +327,15 @@ class CohortManager(object):
         # Clean data from the kwargs.
         self._check_drug_fields(kwargs)
 
+        # Format date if date object was passed.
+        for field in ("from_date", "end_date"):
+            if type(kwargs.get(field)) is datetime.date:
+                kwargs[field] = kwargs[field].strftime("%Y-%m-%d")
+
         extra_params = map(kwargs.get, DRUG_EXTRA_FIELDS)
 
         # Check that the sample is valid.
-        if sample not in self.get_samples():
+        if self.get_samples() is not None and sample not in self.get_samples():
             raise ValueError("Sample '{}' not in the manager.".format(sample))
 
         self.cur.execute(
@@ -347,7 +353,11 @@ class CohortManager(object):
 
         for field in ("from_date", "end_date"):
             if field in fields:
-                if not _is_valid_date(fields[field]):
+                val = fields[field]
+                if (type(val) is datetime.date or val is None):
+                    continue
+
+                if not _is_valid_date(val):
                     raise ValueError(bad_date_message.format(field=field))
 
         try:
@@ -1086,37 +1096,46 @@ class _Variable(object):
         self.data = data
         self.nans = np.isnan(self.data)
 
-    def _discrete_comparison(self, a, b, function, nans=None):
+    def _discrete_comparison(self, a, b, function):
         """Apply a comparison operator in discrete space."""
-        # The cohort manager uses floats to represent discrete outcomes.
-        values = function(a, b).astype(float)
-        if nans is not None:
-            values[nans] = np.nan
-        return _Variable(values)
+        nans = np.isnan(a)
+        if type(b) is np.ndarray:
+            assert a.shape == b.shape
+            assert len(a.shape) == 1
+            nans |= np.isnan(b)
+            vals = np.where(~nans)[0]
+            b = b[vals]
+        else:
+            vals = np.where(~nans)[0]
+
+        out = np.full(a.shape[0], np.nan)
+        out[vals] = function(a[vals], b)
+
+        return _Variable(out)
 
     def __gt__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a > b, self.nans)
+                                         operator.gt)
 
     def __lt__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a < b, self.nans)
+                                         operator.lt)
 
     def __ge__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a >= b, self.nans)
+                                         operator.ge)
 
     def __le__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a <= b, self.nans)
+                                         operator.le)
 
     def __eq__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a == b, self.nans)
+                                         operator.eq)
 
     def __ne__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a != b, self.nans)
+                                         operator.ne)
 
     def _boolean_operation(self, a, b, function, nans="both"):
         """Apply a boolean operation in discrete space.

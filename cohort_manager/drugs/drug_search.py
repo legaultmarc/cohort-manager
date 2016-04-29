@@ -21,6 +21,11 @@ DEFAULT_MIN_SCORE = 0.8
 logger = logging.getLogger(__name__)
 
 
+# Raises an exception if ChEMBL is not installed.
+with ChEMBL():
+    pass
+
+
 def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
     """Searches the query to find any element of drugs.
 
