@@ -11,6 +11,7 @@ import datetime
 import collections
 import argparse
 import logging
+import os
 
 import pandas as pd
 import numpy as np
@@ -165,7 +166,8 @@ def build_database(args):
     curated.dropna(how="any", inplace=True)
 
     # Get the cohort.
-    cohort = CohortManager(args.cohort_name)
+    path, cohort_name = os.path.split(args.cohort_name)
+    cohort = CohortManager(cohort_name, path=path)
 
     # Query to list of molregnos.
     query_dict = collections.defaultdict(list)

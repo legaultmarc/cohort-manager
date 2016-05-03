@@ -44,6 +44,7 @@ from cohort_manager.parser import parse_yaml
 from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
 from cohort_manager.drugs.drug_search import find_drugs_in_query
+from cohort_manager.drugs.atc import get_atc_code_level
 
 
 plt.style.use("ggplot")
@@ -320,7 +321,7 @@ def _get_data_meta(phenotype):
         raise REPLException("Dummy phenotypes (e.g. '{}') are used only for "
                             "organization purposes and cannot be modified or "
                             "viewed.".format(phenotype))
-        
+
     try:
         data = manager.get_data(phenotype, numpy=True)
     except KeyError:
@@ -428,8 +429,56 @@ def list():
     return {"success": True, "message": message.getvalue()}
 
 
-@command(args_types=(str, ))
-def info(phenotype):
+def _info_drug(drug_code):
+    """Command called by info when the drug sub-command is used.
+
+    This can be used with a molregno or an ATC code.
+
+    """
+    manager = _get_manager()
+    name = ""
+
+    # Try to parse an ATC code.
+    atc = False
+    try:
+        get_atc_code_level(drug_code)
+        atc = True
+    except ValueError:
+        pass
+
+    if atc:
+        name = "ATC:{}".format(drug_code)
+        data = manager.get_drug_users_atc(drug_code)
+
+    # This should be a molregno.
+    else:
+        try:
+            molregno = int(drug_code)
+            name = "Molregno:{}".format(drug_code)
+            data = manager.get_drug_users(molregno)
+        except ValueError:
+            raise REPLException(
+                "Could not parse drug code '{}'. Is it a ChEMBL molecule ID "
+                "or an ATC code?".format(drug_code)
+            )
+
+    # Create a virtual variable.
+    name = "_{}_users".format(name)
+    manager.add_phenotype(
+        name=name,
+        variable_type="discrete",
+        description="Dynamically generated variable for drug users."
+    )
+
+    manager.add_data(name, data)
+    manager.commit()
+    res = info(name)
+    manager.delete(name)
+    return res
+
+
+@command(args_types=(str, str), optional=1)
+def info(phen_or_command, drug_code=None):
     """Get information and summary statistics on a phenotype.
 
     :param phenotype: The name of the phenotype to get summary information on.
@@ -437,7 +486,15 @@ def info(phenotype):
 
     Use 'list' to see all the available phenotypes for this command.
 
+    This command can also be used to get information on a drug:
+
+    info drug 12345 or C05 (ATC code)
+
     """
+    if phen_or_command == "drug":
+        return _info_drug(drug_code)
+
+    phenotype = phen_or_command
     message = StringIO()
     data, meta = _get_data_meta(phenotype)
 
