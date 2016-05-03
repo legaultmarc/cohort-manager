@@ -7,15 +7,16 @@ from __future__ import print_function, division
 A helper script to parse freetext pharmacotherapy data.
 """
 
-import sqlite3
+import datetime
 import collections
 import argparse
 import logging
 
 import pandas as pd
+import numpy as np
 
-import cohort_manager.drugs.drug_search as ds
-from cohort_manager.core import CohortManager
+from ..drugs import drug_search as ds
+from ..core import CohortManager
 
 
 logging.basicConfig(level=logging.INFO)
@@ -25,14 +26,42 @@ CURATE_DB_FILENAME = "drug_database_for_curation.xlsx"
 
 def _read_drugs_file(args):
     logger.info("Reading pharmacotherapy file '{}'.".format(args.filename))
+    logger.info("Columns:")
+    dtypes = {}
+    converters = {}
+
+    def _date_parser(x):
+        if x:
+            try:
+                return datetime.datetime.strptime(x, args.date_format).date()
+            except ValueError:
+                pass
+
+        return None
+
+    col_args = (
+        ("Drug", getattr(args, "drug_column"), str),
+        ("Sample", getattr(args, "sample_column"), str),
+        ("Start date", getattr(args, "start_date_column", None), "date"),
+        ("End date", getattr(args, "end_date_column", None), "date"),
+        ("Indication", getattr(args, "indication_column", None), str),
+        ("Dose", getattr(args, "dose_column", None), float),
+    )
+    for name, col, dtype in col_args:
+        if col is not None:
+            logger.info("\t- {} ({})".format(name, col))
+            dtypes[col] = dtype if dtype != "date" else str
+
+            if dtype == "date":
+                converters[col] = _date_parser
 
     # Open the pharmacotherapy file.
+    cols = list(dtypes.keys())
+
     params = {
-        "dtype": {
-            args.drug_column: str,
-            args.sample_column: str
-        },
-        "usecols": [args.drug_column, args.sample_column]
+        "dtype": dtypes,
+        "usecols": cols,
+        "converters": converters
     }
 
     if args.delim:
@@ -48,8 +77,6 @@ def _read_drugs_file(args):
     if args.drug_column not in drugs_data.columns:
         raise ValueError("Drug column '{}' could not be found in input file."
                          "".format(args.drug_column))
-
-    drugs_data = drugs_data[[args.sample_column, args.drug_column]]
 
     logger.info("Read {} rows.".format(drugs_data.shape[0]))
     return drugs_data
@@ -145,15 +172,54 @@ def build_database(args):
     for i, row in curated.iterrows():
         query_dict[row.query].append(int(row.molregno))
 
+    if not (cohort["frozen"] == "yes"):
+        # This sample order has not been set yet, so we will set so that users
+        # can use the cohort.
+        cohort.set_samples(
+            drugs_data.loc[:, args.sample_column].unique().astype(np.string_)
+        )
+
     # Load the pharmacotherapy data.
     no_matches = set()
     multiple_matches = set()
     molregnos = set()
     samples = set()
     n_entries = 0
+
+    logger.info("Inserting pharmacotherapy data in the database (this might "
+                "take a while).")
     for i, row in drugs_data.iterrows():
         sample = row[args.sample_column]
         drug_query = row[args.drug_column]
+
+        # Optional parameters.
+        optionals = {}
+        date_opts = [
+            ("start_date_column", "from_date"),
+            ("end_date_column", "end_date"),
+        ]
+
+        for col, option in date_opts:
+            if getattr(args, col, False):
+                val = row[getattr(args, col)]
+                optionals[option] = val
+
+                if val and type(val) is not datetime.date:
+                    logger.critical(
+                        "Some entries in '{}' could not be parsed ('{}'). "
+                        "Verify the dataset and the --date-format argument."
+                        "".format(col, val)
+                    )
+                    quit(1)
+
+        if getattr(args, "end_date_column", False):
+            optionals["end_date"] = row[args.end_date_column]
+
+        if getattr(args, "indication_column", False):
+            optionals["indication"] = row[args.indication_column]
+
+        if getattr(args, "dose_column", False):
+            optionals["dose"] = row[args.dose_column]
 
         if drug_query not in query_dict:
             no_matches.add(drug_query)
@@ -166,17 +232,9 @@ def build_database(args):
             n_entries += 1
             molregnos.add(molregno)
             samples.add(sample)
-            try:
-                cohort.register_drug_user(molregno, sample)
-            except sqlite3.IntegrityError:
-                pass  # It was already in the database (could be duplicates).
+            cohort.register_drug_user(molregno, sample, **optionals)
 
     cohort.con.commit()
-
-    if not (cohort["frozen"] == "yes"):
-        # This sample order has not been set yet, so we will set so that users
-        # can use the cohort.
-        cohort.set_samples(list(samples))
 
     info = (n_entries, len(molregnos), len(samples), len(no_matches),
             len(multiple_matches))
@@ -287,6 +345,48 @@ def parse_args():
               "This option is used when creating the database"),
         required=True,
     )
+
+    # Pharmacotherapy metadata.
+    build_parser.add_argument(
+        "--indication-column",
+        help=("The name of the column containing the textual description of "
+              "indication for a given drug."),
+        default=None
+    )
+
+    build_parser.add_argument(
+        "--start-date-column",
+        help=("The name of the column containing the start date of "
+              "pharmacotherapy."),
+        default=None
+    )
+
+    build_parser.add_argument(
+        "--end-date-column",
+        help=("The name of the column containing the start date of "
+              "pharmacotherapy."),
+        default=None
+    )
+
+    build_parser.add_argument(
+        "--date-format",
+        help=("A template string for the date representaiton. \nSee "
+              "https://docs.python.org/3.5/library/datetime.html#strftime-strptime-behavior"
+              "\nfor a list of available directives. The default is the "
+              "ISO 8601 format (YYYY-MM-DD)."),
+        default="%Y-%m-%d"
+    )
+
+    build_parser.add_argument(
+        "--dose-column",
+        help=("The name of the column containing the dose for drugs. This "
+              "column should contain numbers."),
+        default=None
+    )
+
+    # TODO
+    # Add the --dose-unit-column and --dose-unit flags. This is not formally
+    # available in most datasets so it is not a priority at this point.
 
     args = parser.parse_args()
     if args.command == "build":

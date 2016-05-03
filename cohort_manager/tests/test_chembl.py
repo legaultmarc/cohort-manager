@@ -35,14 +35,15 @@ class TestChEMBL(unittest.TestCase):
 
     def test_get_children(self):
         with ChEMBL() as db:
-            # 674723 has no children.
+            # 674723 has no children (this might fail in future versions).
             self.assertEqual(db.get_children(674723), set())
 
             # 394165 has 2 children.
-            self.assertEqual(db.get_children(394165), {674723, 674830})
+            self.assertTrue(674723 in db.get_children(394165))
+            self.assertTrue(674830 in db.get_children(394165))
 
             # Another case (atorvastatin -> atorvastatin calcium).
-            self.assertEqual(db.get_children(417180), {407354})
+            self.assertTrue(407354 in db.get_children(417180))
 
     def test_get_drugs_modulating_protein(self):
         # Take statins.

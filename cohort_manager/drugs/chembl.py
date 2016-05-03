@@ -11,10 +11,8 @@ ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_20/
 from __future__ import division, print_function
 
 import collections
-import functools
 import base64
 import os
-import re
 import logging
 
 import psycopg2
@@ -43,6 +41,15 @@ if not DB_PASSWORD:
 _SYNONYM_SOURCES = ("USAN", "USP", "FDA", "TRADE_NAME")
 
 
+class ChEMBLNotInstalled(Exception):
+    def __init__(self):
+        self.value = ("The local ChEMBL database is either not installed or "
+                      "not properly configured.")
+
+    def __str__(self):
+        return self.value
+
+
 class ChEMBL(object):
     """Class to facilitate ChEMBL queries.
 
@@ -67,12 +74,14 @@ class ChEMBL(object):
 
     """
     def __init__(self):
-        self._get_con = functools.partial(
-            psycopg2.connect, database=DB_NAME, user=DB_USERNAME,
-            password=DB_PASSWORD, host=DB_HOST, port=DB_PORT
-        )
+        try:
+            self.con = psycopg2.connect(
+                database=DB_NAME, user=DB_USERNAME, password=DB_PASSWORD,
+                host=DB_HOST, port=DB_PORT
+            )
+        except psycopg2.OperationalError:
+            raise ChEMBLNotInstalled()
 
-        self.con = self._get_con()
         self.cur = self.con.cursor()
         self._cache = {}
 
@@ -137,7 +146,6 @@ class ChEMBL(object):
             return molregno
         assert len(res) == 1
         return res[0][1]
-
 
     def get_parent(self, molregno):
         """Get the molregno of the parent drug.
@@ -243,7 +251,6 @@ class ChEMBL(object):
                              "".format(uniprot_id))
 
         return [i[0] for i in ids]
-
 
     def get_drug_info(self, molregno):
         """Returns information on a drug.

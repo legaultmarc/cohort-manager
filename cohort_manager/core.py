@@ -4,10 +4,12 @@
 from __future__ import division
 
 import collections
+import operator
 import itertools
 import logging
 import sqlite3
 import atexit
+import datetime
 import uuid
 import os
 
@@ -24,6 +26,9 @@ from .drugs.chembl import ChEMBL
 
 logger = logging.getLogger(__name__)
 VARIABLE_TYPES = {"discrete", "continuous", "factor"}
+DRUG_EXTRA_FIELDS = (
+    "start_date", "end_date", "indication", "dose", "dose_unit"
+)
 
 
 class UnknownSamplesError(Exception):
@@ -182,7 +187,11 @@ class CohortManager(object):
             "CREATE TABLE drug_users ("
             " drug_id TEXT,"
             " sample_id TEXT,"
-            " CONSTRAINT drug_users_pk PRIMARY KEY (drug_id, sample_id)"
+            " start_date INTEGER,"
+            " end_date INTEGER,"
+            " indication TEXT,"
+            " dose REAL,"
+            " dose_unit TEXT"
             ");"
         )
 
@@ -324,13 +333,74 @@ class CohortManager(object):
             (name, ),
         )
 
-    def register_drug_user(self, drug_id, sample):
-        """Register that 'sample' is a user of drug 'drug_id'"""
-        if sample not in self.get_samples():
+    def register_drug_user(self, drug_id, sample, **kwargs):
+        """Register that 'sample' is a user of drug 'drug_id'.
+
+        :param drug_id: A valid ChEMBL molregno.
+        :type drug_id: int
+
+        :param sample: The sample ID.
+        :type sample: str
+
+        Other parameters are also allowed:
+            - start_date: (datetime) Recorded date of therapy start.
+            - end_date: (datetime) The end date.
+            - indication: (str) The reason why the individual uses the drug.
+                                This is unstructured for now.
+            - dose: (float) The medication dose.
+            - dose_unit: (str) The units for the dose (e.g. mg).
+
+        """
+        # Clean data from the kwargs.
+        self._check_drug_fields(kwargs)
+
+        # Format date if date object was passed.
+        for field in ("start_date", "end_date"):
+            if type(kwargs.get(field)) is datetime.date:
+                kwargs[field] = kwargs[field].strftime("%Y-%m-%d")
+
+        # Check that start < end.
+        if kwargs.get("start_date") and kwargs.get("end_date"):
+            strptime = datetime.datetime.strptime
+            start = strptime(kwargs["start_date"], "%Y-%m-%d")
+            end = strptime(kwargs["end_date"], "%Y-%m-%d")
+
+            if end < start:
+                raise ValueError("end_date is before than start date.")
+
+        extra_params = map(kwargs.get, DRUG_EXTRA_FIELDS)
+
+        # Check that the sample is valid.
+        if self.get_samples() is not None and sample not in self.get_samples():
             raise ValueError("Sample '{}' not in the manager.".format(sample))
+
         self.cur.execute(
-            "INSERT INTO drug_users VALUES (?, ?)", (str(drug_id), sample)
+            "INSERT INTO drug_users VALUES (?, ?, ?, ?, ?, ?, ?)",
+            tuple(itertools.chain((str(drug_id), sample), extra_params))
         )
+
+    def _check_drug_fields(self, fields):
+        bad_date_message = (
+            "Invalid date representation for '{field}'. Use ISO 8601 (e.g. "
+            "2010-02-26)."
+        )
+
+        bad_dose_message = "Invalid dose (dose should be a number)."
+
+        for field in ("start_date", "end_date"):
+            if field in fields:
+                val = fields[field]
+                if (type(val) is datetime.date or val is None):
+                    continue
+
+                if not _is_valid_date(val):
+                    raise ValueError(bad_date_message.format(field=field))
+
+        try:
+            if "dose" in fields:
+                float(fields["dose"])
+        except ValueError:
+            raise ValueError(bad_dose_message)
 
     def update_phenotype(self, name, **kwargs):
         """Update an existing phenotype.
@@ -594,14 +664,103 @@ class CohortManager(object):
         )
         return self.cur.fetchone() is not None
 
-    def get_drug_users(self, drug_id, as_bool=False):
+    def _build_drug_filtering_sql(self, filters):
+        """Builds SQL statements to filter drug users as described in the
+        `get_drug_users` method.
+
+        """
+        known_filters = ("between_dates", "indication", "dose")
+
+        extra = set(filters.keys()) - set(known_filters)
+        if extra:
+            raise TypeError("Unknown filter(s) '{}'.".format(extra))
+
+        sql = []
+        args = []
+
+        # Apply the date filter.
+        if "between_dates" in filters.keys():
+            dates = filters["between_dates"]
+            if type(dates) is not tuple or len(dates) != 2:
+                raise ValueError("Expected the 'between_dates' filter to be a "
+                                 "tuple of date str.")
+
+            start, end = dates
+            dates = [start, end]
+            for i in (0, 1):
+                if isinstance(dates[i], datetime.date):
+                    dates[i] = dates[i].strftime("%Y-%m-%d")
+                elif not (dates[i] is None or _is_valid_date(dates[i])):
+                    raise ValueError("Invalid date '{}' (not ISO 8601)."
+                                     "".format(dates[i]))
+
+            if start is None and end is None:
+                raise ValueError("Provide at least one boundary for "
+                                 "between_dates.")
+
+            if start is not None:
+                sql.append("end_date>?")
+                args.append(start)
+
+            if end is not None:
+                sql.append("start_date<?")
+                args.append(end)
+
+        # Apply the indication filter.
+        if filters.get("indication"):
+            sql.append("LOWER(indication) LIKE ?")
+            args.append(filters["indication"].lower())
+
+        # Apply the dose filter.
+        if "dose" in filters.keys():
+            dose = filters["dose"]
+            if (type(dose) is not tuple) or len(dose) > 2:
+                raise ValueError("Expected the 'dose' filter to be a tuple of "
+                                 "dose (float) and unit (str, optional).")
+
+            if len(dose) == 2:
+                dose, unit = dose
+            else:
+                dose = dose[0]
+                unit = None
+
+            dose = float(dose)
+
+            sql.append("dose=?")
+            args.append(dose)
+
+            if unit:
+                sql.append("dose_unit=?")
+                args.append(unit)
+
+        sql = " AND ".join(sql)
+        return sql, tuple(args)
+
+    def get_drug_users(self, drug_id, as_bool=False, **filters):
         """Return a boolean vector similar to a phenotype vector where 1
         represents drug users.
 
         If the sample is a user for a child or parent variable, it will be
         marked as a user for the provided drug.
 
+        It is also possible to use filters:
+            - between_dates (tuple): Only returns users between the provided
+                                     dates. It is possible to use None to set
+                                     only a lower or upper bound.
+            - indication (str): Filter for a specific indication.
+            - dose (tuple): A tuple of dose (float) and unit (str). The unit
+                            can be set to None.
+
+
+        The indication match will always be case insensitive. SQL wildcards
+        are authorized ('%').
+
+        TODO: It could be practical to have dose_greater and dose_lower
+        filters.
+
         """
+        where_clause, args = self._build_drug_filtering_sql(filters)
+
         samples = self.get_samples()
         v = np.zeros(len(samples), dtype=bool)
 
@@ -611,11 +770,15 @@ class CohortManager(object):
 
         # Get all the samples that are users of the provided drug or related
         # drugs (e.g. parent or child).
-        self.cur.execute(
-            "SELECT sample_id FROM drug_users WHERE drug_id IN ({})".format(
-                ",".join([str(i) for i in related])
-            )
+        sql = "SELECT sample_id FROM drug_users WHERE drug_id IN ({})".format(
+            ",".join([str(i) for i in related])
         )
+
+        if where_clause:
+            sql += " AND {}".format(where_clause)
+            self.cur.execute(sql, args)
+        else:
+            self.cur.execute(sql)
 
         for sample in self.cur:
             # Get the index.
@@ -1029,37 +1192,46 @@ class _Variable(object):
         self.data = data
         self.nans = np.isnan(self.data)
 
-    def _discrete_comparison(self, a, b, function, nans=None):
+    def _discrete_comparison(self, a, b, function):
         """Apply a comparison operator in discrete space."""
-        # The cohort manager uses floats to represent discrete outcomes.
-        values = function(a, b).astype(float)
-        if nans is not None:
-            values[nans] = np.nan
-        return _Variable(values)
+        nans = np.isnan(a)
+        if type(b) is np.ndarray:
+            assert a.shape == b.shape
+            assert len(a.shape) == 1
+            nans |= np.isnan(b)
+            vals = np.where(~nans)[0]
+            b = b[vals]
+        else:
+            vals = np.where(~nans)[0]
+
+        out = np.full(a.shape[0], np.nan)
+        out[vals] = function(a[vals], b)
+
+        return _Variable(out)
 
     def __gt__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a > b, self.nans)
+                                         operator.gt)
 
     def __lt__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a < b, self.nans)
+                                         operator.lt)
 
     def __ge__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a >= b, self.nans)
+                                         operator.ge)
 
     def __le__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a <= b, self.nans)
+                                         operator.le)
 
     def __eq__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a == b, self.nans)
+                                         operator.eq)
 
     def __ne__(self, o):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
-                                         lambda a, b: a != b, self.nans)
+                                         operator.ne)
 
     def _boolean_operation(self, a, b, function, nans="both"):
         """Apply a boolean operation in discrete space.
@@ -1259,3 +1431,11 @@ def vector_map(data, _map):
             out[data == key] = target
 
     return out
+
+
+def _is_valid_date(s):
+    try:
+        datetime.datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except Exception:
+        return False
