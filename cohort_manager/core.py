@@ -1190,9 +1190,9 @@ class _Variable(object):
     """Building block to construct virtual phenotypes."""
     def __init__(self, data):
         self.data = data
-        self.nans = np.isnan(self.data)
 
-    def _discrete_comparison(self, a, b, function):
+    @staticmethod
+    def _discrete_comparison(a, b, function):
         """Apply a comparison operator in discrete space."""
         nans = np.isnan(a)
         if type(b) is np.ndarray:
@@ -1233,86 +1233,102 @@ class _Variable(object):
         return self._discrete_comparison(self.data, getattr(o, "data", o),
                                          operator.ne)
 
-    def _boolean_operation(self, a, b, function, nans="both"):
-        """Apply a boolean operation in discrete space.
+    def __and__(self, o):
+        """And (&) operator.
 
-        For this function nans can be "both" or "any". If it is "any" NaNs will
-        be propagated if they are observed in any of the two vectors.
-        This is the desired bahavious for the AND operation.
-
-        If nans is "both", then it is only propagated if both vectors have a
-        NaN value at the given position. This is the desired behavious for
-        OR.
+        +---+---+---+---+
+        |a/b| 0 | 1 | ø |
+        +---+---+---+---+
+        | 0 | 0 | 0 | 0 |
+        +---+---+---+---+
+        | 1 | 0 | 1 | ø |
+        +---+---+---+---+
+        | ø | 0 | ø | ø |
+        +---+---+---+---+
 
         """
-        # Check the types.
-        vectors = [a, b]
-        for i, vector in enumerate(vectors):
-            if not isinstance(a, np.ndarray):
-                raise TypeError("Boolean operations are only supported on "
-                                "numpy arrays.")
-            values = set(np.unique(vector[~np.isnan(vector)]))
-            if values == {0, 1}:
-                # This is the encoding we want.
-                pass
-            elif values == {True, False}:
-                # Recode as floats.
-                vectors[i] = vectors[i].astype(float)
-            else:
-                raise TypeError("Ambiguous encoding for boolean operations.")
-
-        # Check size.
-        if a.shape != b.shape:
-            raise TypeError("Shape mismatch between a and b.")
-
-        # Perform the comparison.
-        if nans == "both":
-            nans = np.isnan(a) & np.isnan(b)
-        elif nans == "any":
-            nans = np.isnan(a) | np.isnan(b)
-        else:
-            raise TypeError("Invalid value for the nan parameter. Use 'any' "
-                            "or 'both'.")
-
-        values = function(a, b).astype(float)
-        values[nans] = np.nan
-        return _Variable(values)
-
-    def __and__(self, o):
-        # Only works for two vectors that can be understood as discrete
-        # variables.
-        return self._boolean_operation(self.data, o.data,
-                                       lambda a, b: (a == 1) & (b == 1),
-                                       "any")
-
-    def __rand__(self, o):
-        return self.__and__(o)
+        v = np.zeros(self.data.shape[0], dtype=float)
+        v[(self.data == 1) & (o.data == 1)] = 1
+        v[np.isnan(self.data) & (o.data != 0)] = np.nan
+        v[(self.data != 0) & np.isnan(o.data)] = np.nan
+        return _Variable(v)
 
     def __or__(self, o):
-        return self._boolean_operation(self.data, o.data,
-                                       lambda a, b: (a == 1) | (b == 1),
-                                       "any")
+        """OR (|) operator.
 
-    def __ror__(self, o):
-        return self.__or__(o)
+        Truth table:
+
+        +---+---+---+---+
+        |a/b| 0 | 1 | ø |
+        +---+---+---+---+
+        | 0 | 0 | 1 | ø |
+        +---+---+---+---+
+        | 1 | 1 | 1 | 1 |
+        +---+---+---+---+
+        | ø | ø | 1 | ø |
+        +---+---+---+---+
+
+        Unit tests are based on this table.
+
+        """
+        v = np.full(self.data.shape[0], np.nan)
+        v[(self.data == 1) | (o.data == 1)] = 1
+        v[(self.data == 0) & (o.data == 0)] = 0
+        return _Variable(v)
+
+    def __xor__(self, o):
+        """The XOR (^) operator.
+
+        Truth table:
+
+        +---+---+---+---+
+        |a/b| 0 | 1 | ø |
+        +---+---+---+---+
+        | 0 | 0 | 1 | ø |
+        +---+---+---+---+
+        | 1 | 1 | 0 | ø |
+        +---+---+---+---+
+        | ø | ø | ø | ø |
+        +---+---+---+---+
+
+        """
+        v = np.full(self.data.shape[0], np.nan)
+        v[(self.data == 0) & (o.data == 0)] = 0
+        v[(self.data == 1) & (o.data == 1)] = 0
+        v[(self.data == 1) & (o.data == 0)] = 1
+        v[(self.data == 0) & (o.data == 1)] = 1
+        return _Variable(v)
 
     def __sub__(self, o):
         o = o.data if isinstance(o, _Variable) else o
         return _Variable(self.data - o)
 
+    def __rsub__(self, o):
+        return self.__sub__(o)
+
     def __add__(self, o):
         o = o.data if isinstance(o, _Variable) else o
         return _Variable(self.data + o)
+
+    def __radd__(self, o):
+        return self.__add__(o)
 
     def __div__(self, o):
         o = o.data if isinstance(o, _Variable) else o
         return _Variable(self.data / o)
 
+    def __rdiv__(self, o):
+        return self.__div__(o)
+
     __truediv__ = __div__
+    __rtruediv__ = __rdiv__
 
     def __mul__(self, o):
         o = o.data if isinstance(o, _Variable) else o
         return _Variable(self.data * o)
+
+    def __rmul__(self, o):
+        return self.__mul__(o)
 
     def __pow__(self, a):
         if not (type(a) in (int, float)):
@@ -1325,14 +1341,9 @@ class _Variable(object):
             raise TypeError("Can't invert non-discrete variable.")
 
         data = self.data.astype(float)
-        data[data == 1] = 2
-        data[data == 0] = 1
+        data[data == 0] = 2
         data -= 1
         return _Variable(data)
-
-    def __nonzero__(self):
-        raise TypeError("The boolean 'not' operation is implemented using "
-                        "the '~' operator.")
 
     def log(self):
         if self._is_discrete():
@@ -1356,7 +1367,7 @@ class _Variable(object):
         return _Variable(np.nanstd(self.data))
 
     def _is_discrete(self):
-        observed = set(np.unique(self.data[~self.nans]))
+        observed = set(np.unique(self.data[~np.isnan(self.data)]))
         return observed == {0, 1}
 
 
