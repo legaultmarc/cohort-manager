@@ -27,7 +27,7 @@ from .drugs.chembl import ChEMBL
 logger = logging.getLogger(__name__)
 VARIABLE_TYPES = {"discrete", "continuous", "factor"}
 DRUG_EXTRA_FIELDS = (
-    "from_date", "end_date", "indication", "dose", "dose_unit"
+    "start_date", "end_date", "indication", "dose", "dose_unit"
 )
 
 
@@ -316,7 +316,7 @@ class CohortManager(object):
         :type sample: str
 
         Other parameters are also allowed:
-            - from_date: (datetime) Recorded date of therapy start.
+            - start_date: (datetime) Recorded date of therapy start.
             - end_date: (datetime) The end date.
             - indication: (str) The reason why the individual uses the drug.
                                 This is unstructured for now.
@@ -328,9 +328,18 @@ class CohortManager(object):
         self._check_drug_fields(kwargs)
 
         # Format date if date object was passed.
-        for field in ("from_date", "end_date"):
+        for field in ("start_date", "end_date"):
             if type(kwargs.get(field)) is datetime.date:
                 kwargs[field] = kwargs[field].strftime("%Y-%m-%d")
+
+        # Check that start < end.
+        if kwargs.get("start_date") and kwargs.get("end_date"):
+            strptime = datetime.datetime.strptime
+            start = strptime(kwargs["start_date"], "%Y-%m-%d")
+            end = strptime(kwargs["end_date"], "%Y-%m-%d")
+
+            if end < start:
+                raise ValueError("end_date is before than start date.")
 
         extra_params = map(kwargs.get, DRUG_EXTRA_FIELDS)
 
@@ -351,7 +360,7 @@ class CohortManager(object):
 
         bad_dose_message = "Invalid dose (dose should be a number)."
 
-        for field in ("from_date", "end_date"):
+        for field in ("start_date", "end_date"):
             if field in fields:
                 val = fields[field]
                 if (type(val) is datetime.date or val is None):
@@ -634,23 +643,32 @@ class CohortManager(object):
             if type(dates) is not tuple or len(dates) != 2:
                 raise ValueError("Expected the 'between_dates' filter to be a "
                                  "tuple of date str.")
+
             start, end = dates
-            for date in (start, end):
-                if not (date is None or _is_valid_date(date)):
+            dates = [start, end]
+            for i in (0, 1):
+                if isinstance(dates[i], datetime.date):
+                    dates[i] = dates[i].strftime("%Y-%m-%d")
+                elif not (dates[i] is None or _is_valid_date(dates[i])):
                     raise ValueError("Invalid date '{}' (not ISO 8601)."
-                                     "".format(date))
+                                     "".format(dates[i]))
+
+            if start is None and end is None:
+                raise ValueError("Provide at least one boundary for "
+                                 "between_dates.")
 
             if start is not None:
                 sql.append("end_date>?")
                 args.append(start)
+
             if end is not None:
                 sql.append("start_date<?")
                 args.append(end)
 
         # Apply the indication filter.
         if filters.get("indication"):
-            sql.append("indication=?")
-            args.append(filters["indication"])
+            sql.append("LOWER(indication) LIKE ?")
+            args.append(filters["indication"].lower())
 
         # Apply the dose filter.
         if "dose" in filters.keys():
@@ -691,6 +709,13 @@ class CohortManager(object):
             - indication (str): Filter for a specific indication.
             - dose (tuple): A tuple of dose (float) and unit (str). The unit
                             can be set to None.
+
+
+        The indication match will always be case insensitive. SQL wildcards
+        are authorized ('%').
+
+        TODO: It could be practical to have dose_greater and dose_lower
+        filters.
 
         """
         where_clause, args = self._build_drug_filtering_sql(filters)
