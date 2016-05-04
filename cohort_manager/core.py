@@ -22,6 +22,7 @@ from six.moves import range
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import inference
 from .drugs.chembl import ChEMBL
+from .drugs.atc import get_atc_code_level
 
 
 logger = logging.getLogger(__name__)
@@ -789,16 +790,16 @@ class CohortManager(object):
 
         return v
 
-    def get_drug_users_atc(self, atc_code):
+    def get_drug_users_atc(self, atc_code, **filters):
         """Returns a vector of drug users for drugs corresponding to an ATC
         code.
 
         """
         with ChEMBL() as db:
             drug_ids = db.get_drugs_with_atc(atc_code)
-        return self._build_drug_user_vector(drug_ids)
+        return self._build_drug_user_vector(drug_ids, **filters)
 
-    def get_drug_users_protein(self, uniprot_id, action=None):
+    def get_drug_users_protein(self, uniprot_id, action=None, **filters):
         """Returns a vector of drug users for drugs modulating the protein
         represented by the provided ID.
 
@@ -818,9 +819,9 @@ class CohortManager(object):
         """
         with ChEMBL() as db:
             drug_ids = db.get_drugs_modulating_protein(uniprot_id, action)
-        return self._build_drug_user_vector(drug_ids)
+        return self._build_drug_user_vector(drug_ids, **filters)
 
-    def _build_drug_user_vector(self, drug_ids):
+    def _build_drug_user_vector(self, drug_ids, **filters):
         """Builds a vector of drug users for a list of drugs.
 
         This calls get_drug_users internally and ORs everything as this
@@ -830,7 +831,7 @@ class CohortManager(object):
         """
         v = np.zeros(self.n, dtype=bool)
         for drug_id in drug_ids:
-            v |= self.get_drug_users(drug_id, as_bool=True)
+            v |= self.get_drug_users(drug_id, as_bool=True, **filters)
         return v.astype(float)
 
     def filter_phenotypes(self, missing_greater=None, missing_lower=None,
@@ -1184,6 +1185,41 @@ class CohortManager(object):
             raise TypeError("The virtual variable system can only be used "
                             "with continuous and discrete variables.")
         return _Variable(data)
+
+    def drug(self, drug_code, **filters):
+        """Returns a variable object representing drug user status.
+
+        >>> v = manager.variable
+        >>> drug = manager.drug
+        >>> # This will take beta-blocker users that had a previous MI.
+        >>> outcome = drug("C07") & v("MI")
+
+        This is compatible with the regular variable interface.
+
+        """
+        # The drug code should be an ATC code or an integer.
+        is_atc = False
+
+        if not isinstance(drug_code, int):
+            try:
+                get_atc_code_level(drug_code)
+                is_atc = True
+            except ValueError:
+                is_atc = False
+
+        if is_atc:
+            drug_users = self.get_drug_users_atc(drug_code, **filters)
+
+        else:
+            try:
+                drug_code = int(drug_code)
+            except ValueError:
+                raise ValueError("Invalid drug code '{}'. Drug codes should "
+                                 "be either an ATC code or a ChEMBL molecule "
+                                 "id (molregno).".format(drug_code))
+            drug_users = self.get_drug_users(drug_code, **filters)
+
+        return _Variable(drug_users)
 
 
 class _Variable(object):

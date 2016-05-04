@@ -330,3 +330,44 @@ class TestManagerDrugs(unittest.TestCase):
             #                          A    B    C    D    E    F
             np.all(statin == np.array([1.0, 0.0, 1.0, 1.0, 0.0, 0.0]))
         )
+
+    def test_virtuals_including_drugs(self):
+        """Test the virtual variable interface for drugs."""
+        self.manager.set_samples(list("ABCD"))
+        self.manager.add_phenotype(
+            name="d1", variable_type="discrete"
+        )
+        self.manager.add_data("d1", [0, 1, np.nan, 1])
+
+        self.manager.register_drug_user(12345, "A")
+        self.manager.register_drug_user(12345, "C")
+        self.manager.register_drug_user(12345, "D")
+
+        v = self.manager.variable
+        drug = self.manager.drug
+
+        np.testing.assert_array_equal(
+            (v("d1") & drug(12345)).data,
+            np.array([0, 0, np.nan, 1])
+        )
+
+    def test_virtuals_including_drugs_atc(self):
+        """Test the virtual variable interface for drugs using ATC code."""
+        self.manager.set_samples(list("ABCD"))
+        self.manager.add_phenotype(
+            name="d1", variable_type="discrete"
+        )
+        self.manager.add_data("d1", [0, 1, np.nan, 1])
+
+        # 27417 is bisoprolol, a beta-blocker (C07)
+        self.manager.register_drug_user(27417, "A")
+        self.manager.register_drug_user(27417, "C")
+        self.manager.register_drug_user(27417, "D")
+
+        v = self.manager.variable
+        drug = self.manager.drug
+
+        np.testing.assert_array_equal(
+            (v("d1") & drug("C07")).data,
+            np.array([0, 0, np.nan, 1])
+        )

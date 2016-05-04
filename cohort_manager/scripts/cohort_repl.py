@@ -44,7 +44,6 @@ from cohort_manager.parser import parse_yaml
 from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
 from cohort_manager.drugs.drug_search import find_drugs_in_query
-from cohort_manager.drugs.atc import get_atc_code_level
 
 
 plt.style.use("ggplot")
@@ -158,15 +157,15 @@ class DefaultPrinter(object):
             message = False
 
         if message:
-            print(message, file=output)
+            print(message.rstrip(), file=output)
         else:
-            print(json.dumps(res, indent=4), file=output)
+            print(json.dumps(res, indent=4).rstrip(), file=output)
 
         n_lines = len(output.getvalue().splitlines())
         if n_lines > 20:
-            self._pager_print(output.getvalue())
+            self._pager_print(output.getvalue().rstrip())
         else:
-            print(output.getvalue())
+            print(output.getvalue().rstrip())
 
     def _pager_print(self, s):
         try:
@@ -436,41 +435,17 @@ def _info_drug(drug_code):
 
     """
     manager = _get_manager()
-    name = ""
-
-    # Try to parse an ATC code.
-    atc = False
-    try:
-        get_atc_code_level(drug_code)
-        atc = True
-    except ValueError:
-        pass
-
-    if atc:
-        name = "ATC:{}".format(drug_code)
-        data = manager.get_drug_users_atc(drug_code)
-
-    # This should be a molregno.
-    else:
-        try:
-            molregno = int(drug_code)
-            name = "Molregno:{}".format(drug_code)
-            data = manager.get_drug_users(molregno)
-        except ValueError:
-            raise REPLException(
-                "Could not parse drug code '{}'. Is it a ChEMBL molecule ID "
-                "or an ATC code?".format(drug_code)
-            )
 
     # Create a virtual variable.
-    name = "_{}_users".format(name)
+    name = "drug_{}_users".format(drug_code)
+
     manager.add_phenotype(
         name=name,
         variable_type="discrete",
         description="Dynamically generated variable for drug users."
     )
 
-    manager.add_data(name, data)
+    manager.add_data(name, manager.drug(drug_code).data)
     manager.commit()
     res = info(name)
     manager.delete(name)
@@ -821,12 +796,15 @@ def virtual(name, variable_type, expression):
 
     manager = _get_manager()
     try:
-        variable = eval(expression, {}, dict(v=manager.variable))
+        variable = eval(
+            expression, {}, dict(v=manager.variable, drug=manager.drug)
+        )
     except Exception as e:
         raise REPLException("Invalid expression for virtual variable.\n" +
                             str(getattr(e, "message", str(e))))
 
-    manager.add_phenotype(name=name, variable_type=variable_type)
+    manager.add_phenotype(name=name, variable_type=variable_type,
+                          description="Formula: {}".format(expression))
     try:
         manager.add_data(name, variable.data)
     except ValueError as e:
