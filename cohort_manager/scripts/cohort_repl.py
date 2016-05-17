@@ -407,7 +407,7 @@ def sql(sql):
     except sqlite3.OperationalError as e:
         raise REPLException("Invalid SQL statement:\n{}".format(e))
 
-    return {"success": True, "results": manager.cur.fetchall()}
+    return {"success": True, "message": str(manager.cur.fetchall())}
 
 
 @command
@@ -511,6 +511,26 @@ def info(phen_or_command, drug_code=None):
                   file=message)
 
     return {"success": True, "message": message.getvalue()}
+
+
+@command(args_types=(str, str))
+def merge(new_name, phenotypes):
+    """Merge a list of discrete variables into factors.
+
+    Example:
+        [cohort repl]> merge new_factor_variable A,B,C
+
+    """
+    phenotypes = [i.strip() for i in phenotypes.split(",")]
+    manager = _get_manager()
+    manager.merge_as_factor(new_name, phenotypes)
+
+    return {
+        "success": True,
+        "message": (
+            "Merged {} into factor variable '{}'.".format(phenotypes, new_name)
+        )
+    }
 
 
 @command(args_types=(str, ), printer=ImagePrinter)

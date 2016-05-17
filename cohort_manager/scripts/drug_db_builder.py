@@ -154,10 +154,10 @@ def build_database(args):
 
     # Read the curated database.
     logger.info(
-        "Reading the curated drug database file '{}'.".format(args.database)
+        "Reading the curated drug database file '{}'.".format(args.import_file)
     )
     curated = pd.read_excel(
-        args.database, sheetname=None
+        args.import_file, sheetname=None
     )
     for sheet in curated.keys():
         curated[sheet] = curated[sheet][["query", "molregno"]]
@@ -334,7 +334,7 @@ def parse_args():
     )
 
     build_parser.add_argument(
-        "--database",
+        "--import-file",
         help=("An excel file translating queries to ChEMBL drugs. Usually, "
               "this file is automaticlaly generated using this script."),
         type=str,

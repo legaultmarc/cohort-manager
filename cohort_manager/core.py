@@ -1023,6 +1023,49 @@ class CohortManager(object):
         # Committing
         self.commit()
 
+    def merge_as_factor(self, new_name, phenotypes, delete=False):
+        """Merge discrete phenotypes into a single factor variable.
+
+        # Create the 'my_var' variable by combining the discrete phenotypes
+        # A, B and C.
+        >>> manager.merge_as_factor("my_var", ("A", "B", "C"), delete=True)
+
+        """
+        # Prepare the data and check type.
+        data = np.full(self.n, np.nan, dtype=np.float)
+        filled = np.zeros(self.n, dtype=bool)
+        for i, phenotype in enumerate(phenotypes):
+            # Get phenotype information.
+            info = self.get_phenotype(phenotype)
+            if info["variable_type"] != "discrete":
+                raise ValueError("Can't merge non-discrete variable ({}) into "
+                                 "factor.".format(phenotype))
+
+            # Add the data.
+            mask = self.get_data(phenotype, numpy=True) == 1.0
+            if np.any(filled & mask):
+                raise ValueError(
+                    "Some discrete variables in the provided set are not "
+                    "mutually exclusive. They can't be combined as a single "
+                    "factor variable."
+                )
+            filled[mask] = True
+            data[mask] = i
+
+        # Create the code.
+        code_name = str(uuid.uuid4()).split("-")[0]
+        for i, phenotype in enumerate(phenotypes):
+            self.add_code(code_name, i, phenotype)
+
+        # Create the variable.
+        self.add_phenotype(name=new_name, variable_type="factor",
+                           code_name=code_name)
+
+        # Fill the data.
+        self.add_data(new_name, data)
+
+        self.commit()
+
     def validate(self, mode="raise"):
         """Run a batch of data validation checks.
 
@@ -1093,10 +1136,10 @@ class CohortManager(object):
             if node.parent.data.variable_type != "discrete":
                 continue
 
-            data = np.array(self.data["data/" + node.data.name])
+            data = self.get_data(node.data.name, numpy=True)
             missing = np.isnan(data)
 
-            parent_data = np.array(self.data["data/" + node.data.parent])
+            parent_data = self.get_data(node.data.parent, numpy=True)
             parent_control = parent_data == 0
 
             # Reclassification.
@@ -1194,7 +1237,7 @@ class CohortManager(object):
         >>> # This will take beta-blocker users that had a previous MI.
         >>> outcome = drug("C07") & v("MI")
 
-        This is compatible with the regular variable interface.
+        This is compatible with the virtual variable interface.
 
         """
         # The drug code should be an ATC code or an integer.
@@ -1374,7 +1417,8 @@ class _Variable(object):
 
     def __invert__(self):
         if not self._is_discrete():
-            raise TypeError("Can't invert non-discrete variable.")
+            raise TypeError("Can't invert non-discrete variable (or "
+                            "case-only).")
 
         data = self.data.astype(float)
         data[data == 0] = 2
@@ -1394,6 +1438,25 @@ class _Variable(object):
                 "'mean' is only available for continuous variables."
             )
         return _Variable(np.nanmean(self.data))
+
+    def _pass_filter(self, threshold, mode):
+        if self._is_discrete():
+            raise TypeError(
+                "'low_pass' is only available for continuous variables."
+            )
+        data = self.data.copy()
+        op = operator.le if mode == "low" else operator.ge
+        for i in range(data.shape[0]):
+            if not np.isnan(data[i]):
+                data[i] = data[i] if op(data[i], threshold) else np.nan
+
+        return _Variable(data)
+
+    def low_pass(self, threshold):
+        return self._pass_filter(threshold, "low")
+
+    def high_pass(self, threshold):
+        return self._pass_filter(threshold, "high")
 
     def std(self):
         if self._is_discrete():

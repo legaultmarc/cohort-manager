@@ -7,7 +7,6 @@
 # python setup.py sdist --format zip
 
 import os
-import functools
 
 from setuptools import setup, find_packages
 from distutils.core import Extension
@@ -61,7 +60,8 @@ def setup_package():
         entry_points={
             "console_scripts": [
                 "cohort-repl=cohort_manager.scripts.cohort_repl:entry_point",
-                "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args"
+                "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args",
+                "cohort-import=cohort_manager.scripts.cohort_import:parse_args",
             ],
         },
         classifiers=["Development Status :: 4 - Beta",

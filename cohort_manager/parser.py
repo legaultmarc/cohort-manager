@@ -3,14 +3,16 @@ Parse the YAML file used to build the cohort.
 """
 
 import os
-import shutil
 import logging
-
 import yaml
+import collections
+import json
+
 import pandas as pd
 import numpy as np
 
 from .core import CohortManager, UnknownSamplesError, vector_map
+from . import inference
 
 
 ENGINES = {}
@@ -25,6 +27,150 @@ class InvalidConfig(Exception):
         return "Invalid configuration file.\n{}".format(self.value)
 
 
+def parse_excel(filename, cohort_name):
+    """Fill the database using the provided Excel configuration file."""
+    logger.info("Processing data from '{}'.".format(filename))
+
+    # Read the columns data.
+    variables = pd.read_excel(filename, sheetname="Variables")
+
+    # Keep only variables that are flagged for importation.
+    variables = variables.loc[variables["import"].astype(int) == 1, :]
+
+    # Exclude variables that contain text.
+    variables = variables.loc[variables["variable_type"] != "text", :]
+
+    # Set the name as the index.
+    variables = variables.set_index("name", verify_integrity=True)
+
+    # Read the metadata sheet containing information about the source file.
+    metadata = pd.read_excel(filename, sheetname="Metadata", header=None)
+
+    # Default values.
+    metadata_dict = {"encoding": "utf-8", "delimiter": ",",
+                     "known_missings": "[]"}
+    for i, row in metadata.iterrows():
+        metadata_dict[row[0]] = row[1]
+
+    metadata_dict["known_missings"] = json.loads(
+        metadata_dict["known_missings"]
+    )
+    filename = metadata_dict.pop("filename")
+
+    # Get the name of the sample ID column.
+    keys = variables.loc[variables["variable_type"] == "unique_key", :].index
+    keys = list(keys)
+
+    if len(keys) == 0:
+        logger.critical(
+            "Can't import phenotypes from '{}' because there is no field of "
+            "type 'unique_key' (for the sample IDs).".format(filename)
+        )
+        return False
+
+    elif len(keys) > 1:
+        logger.critical(
+            "Can't import phenotypes from '{}' because the column containing "
+            "sample IDs is not unique (only one column of type 'unique_key' "
+            "should be in the import file.".format(filename)
+        )
+        return False
+
+    sample_column = keys.pop()
+    samples = []
+
+    sep = metadata_dict["delimiter"]
+    with open(filename, "r", encoding=metadata_dict["encoding"]) as f:
+        header = next(f)
+        header = header.split(sep)
+
+        variable_to_index = dict([(j, i) for i, j in enumerate(header)])
+        data = collections.defaultdict(list)
+
+        for line in f:
+            line = line.rstrip().split(sep)
+
+            # Build the list of sample IDs at the same time.
+            samples.append(line[variable_to_index[sample_column]])
+
+            # Keep only the data.
+            for variable in variables.index:
+                if variable == sample_column:
+                    continue
+
+                index = variable_to_index[variable]
+                data[variable].append(line[index])
+
+    manager = CohortManager(cohort_name)
+
+    # Type cast and insert.
+    for variable in data.keys():
+        _type = variables.loc[variable, "variable_type"]
+        if not _type:
+            logger.warning("Could not load variable '{}' because of it has an "
+                           "unknown type.".format(variable))
+            continue
+
+        if _type == "discrete":
+            # Encode manually.
+            # Get the code.
+            affected = variables.loc[variable, "affected"]
+            unaffected = variables.loc[variable, "unaffected"]
+
+            v = np.empty(len(data[variable]), dtype=np.float)
+            for i in range(v.shape[0]):
+                value = data[variable][i]
+
+                try:
+                    value = float(value)
+                except ValueError:
+                    v[i] = np.nan
+                    continue
+
+                if value == affected:
+                    v[i] = 1
+                elif value == unaffected:
+                    v[i] = 0
+                else:
+                    v[i] = np.nan
+
+            data[variable] = v
+
+        else:
+            data[variable] = inference.cast_type(data[variable], _type)[1]
+
+        if _type == "year":
+            _type = "continuous"
+
+        # Check if it is a new cohort and set or check the sample order.
+        if not (manager["frozen"] == "yes"):
+            manager.set_samples(samples)
+        else:
+            samples = np.array(samples)
+            db_samples = manager.get_samples()
+            if not np.all(samples == db_samples):
+                raise NotImplementedError(
+                    "Automatic import of permutated samples is not yet "
+                    "supported."
+                )
+
+        # Get other meta-data.
+        description = variables.loc[variable, "description"]
+        icd10 = variables.loc[variable, "icd10"]
+
+        manager.add_phenotype(
+            name=variable, variable_type=_type, description=description,
+            icd10=icd10
+        )
+
+        manager.add_data(
+            variable, data[variable]
+        )
+
+    manager.commit()
+    return True
+
+
 def parse_yaml(filename):
     with open(filename) as f:
         config = yaml.load(f)
@@ -33,11 +179,6 @@ def parse_yaml(filename):
     name = config.get("name")
     if not name:
         raise InvalidConfig("No cohort name ('name') was provided.")
-
-    # FIXME. In production, be more careful.
-    if os.path.isdir(name):
-        logger.warning("Deleting directory '{}'.".format(name))
-        shutil.rmtree(name)
 
     manager = CohortManager(name)
 
