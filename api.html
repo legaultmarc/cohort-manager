@@ -1,0 +1,637 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>The core API &mdash; CohortManager 0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="CohortManager 0.1 documentation" href="index.html"/>
+        <link rel="prev" title="CohortManager Documentation" href="index.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CohortManager
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">The core API</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="index.html">CohortManager</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+ 
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+      
+    <li>The core API</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/api.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cohort_manager.core">
+<span id="the-core-api"></span><h1>The core API<a class="headerlink" href="#module-cohort_manager.core" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="cohort_manager.core.CohortManager">
+<em class="property">class </em><code class="descclassname">cohort_manager.core.</code><code class="descname">CohortManager</code><span class="sig-paren">(</span><em>name</em>, <em>path=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager" title="Permalink to this definition">¶</a></dt>
+<dd><p>The Manager class which contains all the core API methods.</p>
+<p>This is the main way of interacting with the data from the CohortManager.</p>
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_code">
+<code class="descname">add_code</code><span class="sig-paren">(</span><em>name</em>, <em>key</em>, <em>value</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_code"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_code" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert a code (INTEGER -&gt; phenotype).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_codes">
+<code class="descname">add_codes</code><span class="sig-paren">(</span><em>li</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_codes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_codes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Batch insert codes into the database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_data">
+<code class="descname">add_data</code><span class="sig-paren">(</span><em>phenotype</em>, <em>values</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a data vector to the cohort.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_dummy_phenotype">
+<code class="descname">add_dummy_phenotype</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_dummy_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_dummy_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert a dummy phenotype into the database.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The dummy phenotype is added to the &#8220;normal&#8221; phenotype table, but
+an entry is added to the dummy_phenotype table.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_phenotype">
+<code class="descname">add_phenotype</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert a phenotype into the database.</p>
+<dl class="docutils">
+<dt>Known fields are:</dt>
+<dd><ul class="first last simple">
+<li>name</li>
+<li>icd10</li>
+<li>parent</li>
+<li>variable_type</li>
+<li>crf_page</li>
+<li>description</li>
+<li>code_name</li>
+</ul>
+</dd>
+</dl>
+<div class="admonition-todo admonition" id="index-0">
+<p class="first admonition-title">Todo</p>
+<p class="last">Check that the <code class="docutils literal"><span class="pre">code_name</span></code> is in the <code class="docutils literal"><span class="pre">code</span></code> table.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.add_phenotypes">
+<code class="descname">add_phenotypes</code><span class="sig-paren">(</span><em>li</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.add_phenotypes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.add_phenotypes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Batch insert phenotypes into the database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.check_phenotypes_have_data">
+<code class="descname">check_phenotypes_have_data</code><span class="sig-paren">(</span><em>printer</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.check_phenotypes_have_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.check_phenotypes_have_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that all the phenotypes in the database have data entries.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.commit">
+<code class="descname">commit</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.commit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.commit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Commit the database and rebuilt the phenotype tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.contingency">
+<code class="descname">contingency</code><span class="sig-paren">(</span><em>phenotype1</em>, <em>phenotype2</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.contingency"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.contingency" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build a contingency table for two discrete or factor phenotypes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.delete">
+<code class="descname">delete</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.delete"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.delete" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove a phenotype from the manager.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.drug">
+<code class="descname">drug</code><span class="sig-paren">(</span><em>drug_code</em>, <em>**filters</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.drug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.drug" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a variable object representing drug user status.</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">v</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">variable</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">drug</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">drug</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># This will take beta-blocker users that had a previous MI.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outcome</span> <span class="o">=</span> <span class="n">drug</span><span class="p">(</span><span class="s2">&quot;C07&quot;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">v</span><span class="p">(</span><span class="s2">&quot;MI&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This is compatible with the virtual variable interface.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.filter_phenotypes">
+<code class="descname">filter_phenotypes</code><span class="sig-paren">(</span><em>missing_greater=None</em>, <em>missing_lower=None</em>, <em>variable_type=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.filter_phenotypes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.filter_phenotypes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a list of phenotypes corresponding to the selected criterion.</p>
+<p>This method allows filtering of phenotypes with respect to:</p>
+<ul class="simple">
+<li>The rate of missing values</li>
+<li>The variable type</li>
+</ul>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_code">
+<code class="descname">get_code</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_code"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_code" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the integer mappings for a given code.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>name</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; The code name to get from the database.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">A list of tuples of key, value.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list:</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_code_names">
+<code class="descname">get_code_names</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_code_names"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_code_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a set of code names.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_data">
+<code class="descname">get_data</code><span class="sig-paren">(</span><em>phenotype</em>, <em>numpy=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a phenotype vector.</p>
+<p>By default, this will be the HDF5 dataset because it&#8217;s the most
+efficient representation.</p>
+<p>If you need the numpy functionalities, use <cite>numpy=True</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_drug_users">
+<code class="descname">get_drug_users</code><span class="sig-paren">(</span><em>drug_id</em>, <em>as_bool=False</em>, <em>**filters</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_drug_users"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_drug_users" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a boolean vector similar to a phenotype vector where 1
+represents drug users.</p>
+<p>If the sample is a user for a child or parent variable, it will be
+marked as a user for the provided drug.</p>
+<dl class="docutils">
+<dt>It is also possible to use filters:</dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>between_dates (tuple): Only returns users between the provided</dt>
+<dd><p class="first last">dates. It is possible to use None to set
+only a lower or upper bound.</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">indication (str): Filter for a specific indication.</p>
+</li>
+<li><dl class="first docutils">
+<dt>dose (tuple): A tuple of dose (float) and unit (str). The unit</dt>
+<dd><p class="first last">can be set to None.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+<p>The indication match will always be case insensitive. SQL wildcards
+are authorized (&#8216;%&#8217;).</p>
+<p>TODO: It could be practical to have dose_greater and dose_lower
+filters.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_drug_users_atc">
+<code class="descname">get_drug_users_atc</code><span class="sig-paren">(</span><em>atc_code</em>, <em>**filters</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_drug_users_atc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_drug_users_atc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a vector of drug users for drugs corresponding to an ATC
+code.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_drug_users_protein">
+<code class="descname">get_drug_users_protein</code><span class="sig-paren">(</span><em>uniprot_id</em>, <em>action=None</em>, <em>**filters</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_drug_users_protein"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_drug_users_protein" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a vector of drug users for drugs modulating the protein
+represented by the provided ID.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>uniprot_id</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; The Uniprot ID (e.g. P31639)</li>
+<li><strong>action</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; The action type. If None, any action_type is authorized.
+Example action_types are: &#8220;INHIBITOR&#8221;, &#8220;AGONIST&#8221; or
+&#8220;ANTAGONIST&#8221;.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">A vector of drug users.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">numpy.ndarray</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p>See: <a class="reference external" href="http://www.uniprot.org/">http://www.uniprot.org/</a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_number_missing">
+<code class="descname">get_number_missing</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_number_missing"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_number_missing" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the true number of missing data points.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_number_phenotypes">
+<code class="descname">get_number_phenotypes</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_number_phenotypes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_number_phenotypes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the number of phenotypes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_number_unaffected">
+<code class="descname">get_number_unaffected</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_number_unaffected"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_number_unaffected" title="Permalink to this definition">¶</a></dt>
+<dd><p>Robust function to get the number of unaffected samples for a given
+phenotype.</p>
+<p>If the parent of a variable is unaffected (only valid for discrete
+variables), then it is unaffected, even though it will be marked as
+NA in the HDF5 container.</p>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">This does not take into account arbitrary factor values to identify
+unaffected individuals.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_phenotype">
+<code class="descname">get_phenotype</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get information on the phenotype.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_phenotypes_list">
+<code class="descname">get_phenotypes_list</code><span class="sig-paren">(</span><em>dummy=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_phenotypes_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_phenotypes_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a list of available phenotypes from the db.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>dummy</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) &#8211; A flag to return the dummy phenotypes or not.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.get_samples">
+<code class="descname">get_samples</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.get_samples"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.get_samples" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the ordered samples.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">An ordered list of samples in the manager.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.ndarray</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.hierarchical_reclassify">
+<code class="descname">hierarchical_reclassify</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.hierarchical_reclassify"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.hierarchical_reclassify" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reclassify controls according to the PhenotypeTree.</p>
+<p>Let u, v be discrete phenotypes, where u is the parent of v.
+if patient i in unaffected for u, he should be unaffected for v.
+This function adjusts the data container to reflect this constraint.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.is_dummy_phenotype">
+<code class="descname">is_dummy_phenotype</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.is_dummy_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.is_dummy_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if a phenotype is actually a dummy phenotype.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.is_valid_phenotype">
+<code class="descname">is_valid_phenotype</code><span class="sig-paren">(</span><em>phenotype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.is_valid_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.is_valid_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if a phenotype exists.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.merge_as_factor">
+<code class="descname">merge_as_factor</code><span class="sig-paren">(</span><em>new_name</em>, <em>phenotypes</em>, <em>delete=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.merge_as_factor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.merge_as_factor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Merge discrete phenotypes into a single factor variable.</p>
+<p># Create the &#8216;my_var&#8217; variable by combining the discrete phenotypes
+# A, B and C.
+&gt;&gt;&gt; manager.merge_as_factor(&#8220;my_var&#8221;, (&#8220;A&#8221;, &#8220;B&#8221;, &#8220;C&#8221;), delete=True)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.rebuild_tree">
+<code class="descname">rebuild_tree</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.rebuild_tree"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.rebuild_tree" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rebuild the phenotype tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.register_drug_user">
+<code class="descname">register_drug_user</code><span class="sig-paren">(</span><em>drug_id</em>, <em>sample</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.register_drug_user"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.register_drug_user" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register that &#8216;sample&#8217; is a user of drug &#8216;drug_id&#8217;.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>drug_id</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) &#8211; A valid ChEMBL molregno.</li>
+<li><strong>sample</strong> (<a class="reference external" href="https://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; The sample ID.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="docutils">
+<dt>Other parameters are also allowed:</dt>
+<dd><ul class="first last">
+<li><p class="first">start_date: (datetime) Recorded date of therapy start.</p>
+</li>
+<li><p class="first">end_date: (datetime) The end date.</p>
+</li>
+<li><dl class="first docutils">
+<dt>indication: (str) The reason why the individual uses the drug.</dt>
+<dd><p class="first last">This is unstructured for now.</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">dose: (float) The medication dose.</p>
+</li>
+<li><p class="first">dose_unit: (str) The units for the dose (e.g. mg).</p>
+</li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.set_samples">
+<code class="descname">set_samples</code><span class="sig-paren">(</span><em>samples</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.set_samples"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.set_samples" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the sample IDs and order.</p>
+<p>This can take either an ndarray of dtype <a href="#id1"><span class="problematic" id="id2">np.string_</span></a> or a regular Python
+array of str.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.update_phenotype">
+<code class="descname">update_phenotype</code><span class="sig-paren">(</span><em>name</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.update_phenotype"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.update_phenotype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update an existing phenotype.</p>
+<div class="admonition-todo admonition" id="index-1">
+<p class="first admonition-title">Todo</p>
+<p>Add checks for parent and code by making sure the relationships
+hold in the database.</p>
+<p class="last">Also deleting the variable_type should not be allowed.</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.validate">
+<code class="descname">validate</code><span class="sig-paren">(</span><em>mode='raise'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.validate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.validate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run a batch of data validation checks.</p>
+<p>This will make sure that:</p>
+<ul class="simple">
+<li>Samples marked as unaffected for a parent are marked as unaffected
+for all children if both variable types are discrete.</li>
+<li>All the phenotypes in the database have associated data.</li>
+</ul>
+<p>A mode can be provided that will determine if a CohortDataError is
+raised (mode=&#8221;raised&#8221;, default) or if a warning is displayed
+(mode=&#8221;warn&#8221;).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cohort_manager.core.CohortManager.variable">
+<code class="descname">variable</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#CohortManager.variable"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.CohortManager.variable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a variable object usable to create virtual phenotypes.</p>
+<p>Here are illustrative examples of how to use this given an instance
+of CohortManager (named <cite>manager</cite>)</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">v</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">variable</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">age_at_event</span> <span class="o">=</span> <span class="n">v</span><span class="p">(</span><span class="s2">&quot;yearOfEvent&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="n">v</span><span class="p">(</span><span class="s2">&quot;birthYear&quot;</span><span class="p">)</span>
+<span class="go">array([25., 42., 70., 31.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">syndrome</span> <span class="o">=</span> <span class="p">(</span><span class="n">v</span><span class="p">(</span><span class="s2">&quot;arrhythmia&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="n">v</span><span class="p">(</span><span class="s2">&quot;pacemaker&quot;</span><span class="p">))</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">v</span><span class="p">(</span><span class="s2">&quot;age&quot;</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">50</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obese</span> <span class="o">=</span> <span class="p">(</span><span class="n">v</span><span class="p">(</span><span class="s2">&quot;mass&quot;</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">v</span><span class="p">(</span><span class="s2">&quot;height&quot;</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">30</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cohort_manager.core.Permutation">
+<em class="property">class </em><code class="descclassname">cohort_manager.core.</code><code class="descname">Permutation</code><span class="sig-paren">(</span><em>manager</em>, <em>samples_list</em>, <em>allow_subset=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#Permutation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.Permutation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Utility class to define an arbitrary sample order for data access.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="cohort_manager.core.vector_map">
+<code class="descclassname">cohort_manager.core.</code><code class="descname">vector_map</code><span class="sig-paren">(</span><em>data</em>, <em>_map</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/core.html#vector_map"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.core.vector_map" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remaps numeric values in a data vector.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>data</strong> &#8211; A numpy array of integer or float dtype.</li>
+<li><strong>_map</strong> &#8211; A list of tuple representing the mappings.
+Alternatively, a dict can be provided directly.
+<code class="docutils literal"><span class="pre">[(2,</span> <span class="pre">1),</span> <span class="pre">(1,</span> <span class="pre">0),</span> <span class="pre">(3,</span> <span class="pre">-10)]</span></code> would transform all the
+<code class="docutils literal"><span class="pre">2</span> <span class="pre">-&gt;</span> <span class="pre">1</span></code>, <code class="docutils literal"><span class="pre">1</span> <span class="pre">-&gt;</span> <span class="pre">0</span></code> and <code class="docutils literal"><span class="pre">3</span> <span class="pre">-&gt;</span> <span class="pre">-10</span></code>.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A remapped numpy array.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p>The strategy used to avoid collisions when sequentially remapping is to
+use transitive mapping. This means that the mapping is done in two steps:
+A mapping to a unique (random) value and then a subsequent mapping to the
+target value.
+This strategy is only used if there are collisions.</p>
+</dd></dl>
+
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="index.html" class="btn btn-neutral" title="CohortManager Documentation" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2016, Marc-André Legault.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

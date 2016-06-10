@@ -1,0 +1,5 @@
+*.swp
+*.pyc
+*.so
+version.py
+docs/_build
