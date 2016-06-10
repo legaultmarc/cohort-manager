@@ -114,6 +114,22 @@ def dispatch_command(line):
     return cmd(*line)
 
 
+def batch(filename):
+    """Execute a file containing multiple repl commands."""
+    STATE["PAGER"] = False
+    with open(filename, "rb") as f:
+        for line in f:
+            command_name = shlex.split(line.decode("utf-8").rstrip())[0]
+            printer = REGISTERED_COMMANDS[command_name].printer
+            if printer is not None:
+                printer = printer()
+            else:
+                printer = DefaultPrinter()
+
+            ret = _handle_command(line)
+            printer(json.dumps(ret).encode("utf-8"))
+
+
 class REPLException(Exception):
     def __init__(self, message):
         self.message = message
@@ -975,12 +991,17 @@ def entry_point():
     parser.add_argument("--disable-pager", action="store_false")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--port", default=None, type=int)
+    parser.add_argument("--script", default=None, type=str)
     args = parser.parse_args()
 
     STATE["DEBUG"] = args.debug
     STATE["PAGER"] = args.disable_pager
     STATE["PREFERRED_PORT"] = args.port
-    main(headless=args.headless)
+
+    if args.script:
+        return batch(args.script)
+
+    return main(headless=args.headless)
 
 
 if __name__ == "__main__":
