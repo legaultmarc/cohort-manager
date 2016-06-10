@@ -390,6 +390,26 @@ def build(yaml_filename):
             "Loaded cohort {}.".format(yaml_filename)}
 
 
+@command(args_types=(str, str))
+def rename(old_name, new_name):
+    """Rename a phenotype.
+
+    :param old_name: The old phenotype name.
+    :type old_name: str
+
+    :param new_name: The new phenotype name.
+    :type new_name: str
+
+    """
+    manager = _get_manager()
+    manager.rename(old_name, new_name)
+
+    return {
+        "success": True,
+        "message": "Renamed '{}' to '{}'.".format(old_name, new_name)
+    }
+
+
 @command(args_types=(str, ))
 def sql(sql):
     """Execute a SQL query on the cohort manager.

@@ -1023,6 +1023,29 @@ class CohortManager(object):
         # Committing
         self.commit()
 
+    def rename(self, old_name, new_name):
+        self.get_phenotype(old_name)  # Will raise KeyError if need be.
+        new_name_is_free = False
+        try:
+            self.get_phenotype(new_name)
+        except KeyError:
+            new_name_is_free = True
+
+        if not new_name_is_free:
+            raise ValueError("New phenotype name already exists.")
+
+        self.cur.execute(
+            "UPDATE phenotypes SET name=? WHERE name=?", (new_name, old_name)
+        )
+
+        # Update the name in the data.
+        new_name = "data/{}".format(new_name)
+        old_name = "data/{}".format(old_name)
+        self.data[new_name] = self.data[old_name]
+        del self.data[old_name]
+
+        self.commit()
+
     def merge_as_factor(self, new_name, phenotypes, delete=False):
         """Merge discrete phenotypes into a single factor variable.
 
