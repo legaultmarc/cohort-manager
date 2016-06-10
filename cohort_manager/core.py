@@ -100,6 +100,11 @@ class Permutation(object):
 
 
 class CohortManager(object):
+    """The Manager class which contains all the core API methods.
+
+    This is the main way of interacting with the data from the CohortManager.
+
+    """
     def __init__(self, name, path=None):
         self.name = name
         if path:
