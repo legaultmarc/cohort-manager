@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .. import core
+from .. import types
 
 
 def _build_manager():
@@ -307,31 +308,12 @@ class TestManager(unittest.TestCase):
         )
 
         # This should raise a ValueError because it's not only 0 and 1.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(types.InvalidValues):
             self.manager.add_data("phenotype3", [0, 1, 1, 2, 0, 0])
 
         # Same thing but with more heterogeneity.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(types.InvalidValues):
             self.manager.add_data("phenotype3", [1, 2, 3, 4, 5, 6])
-
-    @unittest.mock.patch(
-        "cohort_manager.core.CohortManager._check_data_continuous"
-    )
-    def test_check_continuous_gets_called(self, mock):
-        """Tests that _check_data_continuous gets called.
-
-        We test this method individually because it's easier.
-        """
-        self.manager.set_samples(
-            ["sample_{}".format(i + 1) for i in range(100)]
-        )
-        self.manager.add_phenotype(name="phenotype1",
-                                   variable_type="continuous")
-        v = np.random.binomial(1, 0.4, 100)
-        self.manager.add_data("phenotype1", v)
-
-        np.testing.assert_array_equal(v, mock.call_args[0][0])
-        self.assertEqual("phenotype1", mock.call_args[0][1])
 
     def test_check_data_continuous(self):
         """Check the QC checks for continuous data."""
@@ -340,26 +322,24 @@ class TestManager(unittest.TestCase):
         for _ in range(20):
             frequent_outlier[np.random.randint(0, 100)] = -9
 
-        with self.assertRaises(ValueError) as cm:
-            self.manager._check_data_continuous(
-                redundant, "", _raise=True
+        with self.assertRaises(types.InvalidValues) as cm:
+            types.Continuous.check(
+                redundant, _raise=True
             )
         self.assertEqual(
             cm.exception.args[0],
-            "The phenotype '' is marked as continuous, but "
-            "it has a lot of redundancy. Perhaps it should be "
-            "modeled as a factor or another variable type."
+            "There is a lot of redundancy in the values of this continuous "
+            "variable. Perhaps it should be modeled as a factor or another "
+            "variable type."
         )
 
-        with self.assertRaises(ValueError) as cm:
-            self.manager._check_data_continuous(
-                frequent_outlier, "", _raise=True
-            )
+        with self.assertRaises(types.InvalidValues) as cm:
+            types.Continuous.check(frequent_outlier, _raise=True)
         self.assertEqual(
             cm.exception.args[0],
             "The value '-9.0' is commonly found in the tails of the "
-            "distribution for ''. This could be because of bad "
-            "coding of missing values."
+            "distribution. This could be because of bad coding of missing "
+            "values."
         )
 
     def test_check_data_continuous_large(self):
@@ -393,7 +373,7 @@ class TestManager(unittest.TestCase):
             variable_type="factor"
         )
         self.manager.set_samples(list("abcdef"))
-        with self.assertRaises(core.CohortDataError):
+        with self.assertRaises(types.InvalidValues):
             self.manager.add_data("phenotype1", [1, 2, 1, 0, 1, 1])
 
     def test_check_data_factor_nocode(self):

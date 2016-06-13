@@ -20,13 +20,12 @@ import pandas as pd
 from six.moves import range
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
-from . import inference
+from . import types
 from .drugs.chembl import ChEMBL
 from .drugs.atc import get_atc_code_level
 
 
 logger = logging.getLogger(__name__)
-VARIABLE_TYPES = {"discrete", "continuous", "factor"}
 DRUG_EXTRA_FIELDS = (
     "start_date", "end_date", "indication", "dose", "dose_unit"
 )
@@ -304,13 +303,13 @@ class CohortManager(object):
         values = map(kwargs.get, PHENOTYPE_COLUMNS)
 
         # Check that the type is valid.
-        if kwargs["variable_type"] not in VARIABLE_TYPES:
+        if not types.is_type_name(kwargs["variable_type"]):
             raise TypeError("Unknown variable type '{}'.".format(
                 kwargs["variable_type"]
             ))
 
         # Factor variables need a code_name.
-        if kwargs["variable_type"] == "factor":
+        if issubclass(types.type_str(kwargs["variable_type"]), types.Factor):
             if kwargs.get("code_name") is None:
                 raise TypeError("Factor variables need a 'code_name'.")
 
@@ -486,20 +485,19 @@ class CohortManager(object):
         """Add a data vector to the cohort."""
         # Check if phenotype is in database (metadata needs to be there before
         # the user binds data).
-        self.cur.execute(
-            "SELECT name, variable_type, code_name "
-            "FROM phenotypes WHERE name=?",
-            (phenotype, )
-        )
-        tu = self.cur.fetchone()
-        if tu is None:
+        try:
+            meta = self.get_phenotype(phenotype)
+        except KeyError:
+            meta = None
+
+        if meta is None:
             raise ValueError(
                 "Could not find metadata for '{}'. Add the phenotype before "
                 "binding data.".format(phenotype)
             )
-        assert tu[0] == phenotype
-        variable_type = tu[1]
-        code_name = tu[2]
+
+        variable_type = types.type_str(meta["variable_type"])
+        code_name = meta.get("code_name")
 
         if self["frozen"] != "yes":
             raise UnknownSamplesError()
@@ -511,117 +509,35 @@ class CohortManager(object):
             )
 
         if phenotype in self.data["data"].keys():
-            raise ValueError("Data for '{}' is already "
-                             "in the database.".format(phenotype))
+            raise ValueError("Data for '{}' is already in the database."
+                             "".format(phenotype))
 
         # Type check.
         values = np.array(values)
-        if variable_type == "discrete":
-            # We are expecting only 0, 1 and NA.
-            self._check_data_discrete(values, phenotype)
 
-        elif variable_type == "factor":
-            # Make sure the matadata code is consistent with the observed
-            # values.
-            self._check_data_factor(values, phenotype, code_name)
+        # Because checking for factor variables is a bit different, we catch
+        # this situation. Otherwise, we just pass the data to the relevant
+        # check method as defined in the types module.
+        if variable_type.subtype_of(types.Factor):
+            # Get the factor mapping.
+            self.cur.execute(
+                "SELECT key, value FROM code WHERE name=?",
+                (code_name, )
+            )
+            mapping = self.cur.fetchall()
 
-        elif variable_type == "continuous":
-            # If there is less than 5 distinct values, warn the user and
-            # suggest using a different variable type.
-            self._check_data_continuous(values, phenotype)
+            if not mapping:
+                raise CohortDataError("Could not find the code for factor "
+                                      "variable '{}'. The code name is "
+                                      "'{}'.".format(phenotype, code_name))
+
+            variable_type.check(values, mapping)
 
         else:
-            raise ValueError("Unknown variable type '{}'. Use 'discrete', "
-                             "'factor' or 'continuous'.".format(variable_type))
+            variable_type.check(values)
 
+        # If no exception was raised, store the data.
         self.data["data"].create_dataset(phenotype, data=values)
-
-    def _check_data_discrete(self, values, phenotype):
-        """Check that the data vector is consistent with a discrete variable.
-
-        This is done by making sure that only 0, 1 and NAs are in the vector.
-
-        """
-        extra = set(values[~np.isnan(values)]) - {0, 1}
-        if len(extra) != 0:
-            extra = ", ".join([str(i) for i in list(extra)[:5]])
-            if len(extra) > 5:
-                extra += ", ..."
-            raise ValueError(
-                "Authorized values for discrete variables are 0, 1 and np.nan."
-                "\nUnexpected values were observed for '{}' ({})."
-                "".format(phenotype, extra)
-            )
-
-    def _check_data_factor(self, values, phenotype, code_name):
-        """Check that the data vector is consistent with a factor variable.
-
-        This is done by looking at the code from the database and making sure
-        that all the observed integer codes are defined.
-
-        """
-        # Get the code.
-        self.cur.execute(
-            "SELECT key, value FROM code WHERE name=?",
-            (code_name, )
-        )
-        mapping = self.cur.fetchall()
-        if not mapping:
-            raise CohortDataError("Could not find the code for factor "
-                                  "variable '{}'. The code name is "
-                                  "'{}'.".format(phenotype, code_name))
-
-        # Check if the set of observed values is consistent with the code.
-        observed = set(values[~np.isnan(values)])
-        expected = set([i[0] for i in mapping])
-        extra = observed - expected
-        if extra:
-            raise CohortDataError("Unknown encoding value(s) ({}) for factor "
-                                  "variables '{}'.".format(extra, phenotype))
-
-    def _check_data_continuous(self, values, phenotype, _raise=False):
-        """Check that the data vector is continuous.
-
-        This is very hard to check.
-
-        After taking the outlier data points (arbitrarily defined as):
-
-            |x| > 3 * median absolute deviation + median
-
-        We take the most common outlier if it consists of at least 50% of the
-        identified data points. If such a value exist, we suggest to the
-        user that it might be a weird value arising from bad missing variable
-        coding.
-
-        Also, if there is less than 5 distinct values in either the full vector
-        or a random sample of 5000 elements, a warning will be displayed
-        prompting the user to verify the data type.
-
-        """
-        values = values[~np.isnan(values)]
-
-        # Factor check.
-        n_values = inference.estimate_num_distinct(values)
-
-        if n_values < 5:
-            message = ("The phenotype '{}' is marked as continuous, but "
-                       "it has a lot of redundancy. Perhaps it should be "
-                       "modeled as a factor or another variable type."
-                       "".format(phenotype))
-            if _raise:
-                raise ValueError(message)
-            logger.warning(message)  # pragma: no cover
-
-        # Outlier check.
-        common_outlier = inference.find_overrepresented_outlier(values)
-        if common_outlier is not None:
-            message = ("The value '{}' is commonly found in the tails of the "
-                       "distribution for '{}'. This could be because of bad "
-                       "coding of missing values."
-                       "".format(common_outlier, phenotype))
-            if _raise:
-                raise ValueError(message)
-            logger.warning(message)  # pragma: no cover
 
     # Get information.
     def get_samples(self):
@@ -861,11 +777,12 @@ class CohortManager(object):
         states = []
         labels = []
         for i, meta in enumerate((meta1, meta2)):
-            if meta["variable_type"] == "discrete":
+            t = meta["variable_type"]
+            if types.type_str(t).subtype_of(types.Discrete):
                 dims[i] = 3  # NaN, 0, 1
                 states.append([0, 1])
                 labels.append(["missing", "control", "case"])
-            elif meta["variable_type"] == "factor":
+            elif types.type_str(t).subtype_of(types.Factor):
                 code = self.get_code(meta["code_name"])
 
                 dims[i] = len(code) + 1
@@ -954,23 +871,29 @@ class CohortManager(object):
         """Get a phenotype vector as a numpy array."""
         # Get metadata.
         meta = self.get_phenotype(phenotype)
-        if meta["variable_type"] == "discrete":
+        t = meta["variable_type"]
+
+        # Make sure the type is valid.
+        if not types.is_type_name(t):
+            raise CohortDataError(
+                "Data for variable '{}' was stored, but it is of an unknown "
+                "type: {}.".format(phenotype, t)
+            )
+
+        if types.type_str(t).subtype_of(types.Discrete):
             return self._get_discrete_data(phenotype)
 
         data = np.array(self._get_raw_data(phenotype))
 
-        if meta["variable_type"] == "continuous":
+        if types.type_str(t).subtype_of(types.Continuous):
             return data
 
-        elif meta["variable_type"] == "factor":
+        elif types.type_str(t).subtype_of(types.Factor):
             return self._represent_factor_data(data, meta)
 
         else:
-            raise ValueError(
-                "Invalid variable type '{}' for '{}'.".format(
-                    meta["variable_type"], phenotype
-                )
-            )
+            # No particular representation needed (or implemented).
+            return data
 
     def _get_discrete_data(self, phenotype):
         unaffected = np.full(self.n, False, dtype=bool)
@@ -1084,7 +1007,8 @@ class CohortManager(object):
         for i, phenotype in enumerate(phenotypes):
             # Get phenotype information.
             info = self.get_phenotype(phenotype)
-            if info["variable_type"] != "discrete":
+            t = info["variable_type"]
+            if not types.type_str(t).subtype_of(types.Discrete):
                 raise ValueError("Can't merge non-discrete variable ({}) into "
                                  "factor.".format(phenotype))
 
@@ -1192,7 +1116,8 @@ class CohortManager(object):
         # hierarchy.
         unaffected = None
         for node in path:
-            if node.data.variable_type == "discrete":
+            _type = types.type_str(node.data.variable_type)
+            if _type.subtype_of(types.Discrete):
                 # Get the data vector.
                 data = self.get_data(node.data.name)
                 if unaffected is None:
@@ -1208,12 +1133,16 @@ class CohortManager(object):
         meta = self.get_phenotype(phenotype)
         data = self.get_data(phenotype)
 
-        if meta["variable_type"] == "discrete":
+        t = meta["variable_type"]
+
+        if types.type_str(t).subtype_of(types.Discrete):
             return np.sum(np.isnan(data))
-        elif meta["variable_type"] == "factor":
+
+        elif types.type_str(t).subtype_of(types.Factor):
             nans = np.sum(data.isnull())
             return nans - n_unaffected
-        elif meta["variable_type"] == "continuous":
+
+        elif types.type_str(t).subtype_of(types.Continuous):
             nans = np.sum(np.isnan(data))
             return nans - n_unaffected
 
