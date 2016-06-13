@@ -338,7 +338,7 @@ def _get_data_meta(phenotype):
                             "viewed.".format(phenotype))
 
     try:
-        data = manager.get_data(phenotype, numpy=True)
+        data = manager.get_data(phenotype)
     except KeyError:
         raise REPLException("Could not find data for '{}'.".format(phenotype))
 

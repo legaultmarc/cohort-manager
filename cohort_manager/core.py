@@ -71,7 +71,7 @@ class Permutation(object):
         self.index_map = self._build_index_map()
 
     def get_data(self, phenotype):
-        data = self._manager.get_data(phenotype, numpy=True)
+        data = self._manager.get_data(phenotype)
         return data[self.index_map]
 
     def _build_index_map(self):
@@ -885,8 +885,8 @@ class CohortManager(object):
                 labels[i]
             )])
 
-        v1 = np.array(self.get_data(phenotype1, numpy=False))
-        v2 = np.array(self.get_data(phenotype2, numpy=False))
+        v1 = np.array(self._get_raw_data(phenotype1))
+        v2 = np.array(self._get_raw_data(phenotype2))
 
         counts = np.zeros((m, n)).astype(int) - 1
         counts[0, 0] = np.sum(np.isnan(v1) & np.isnan(v2))
@@ -943,30 +943,49 @@ class CohortManager(object):
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
         return self.cur.fetchall()
 
-    def get_data(self, phenotype, numpy=False):
-        """Get a phenotype vector.
-
-        By default, this will be the HDF5 dataset because it's the most
-        efficient representation.
-
-        If you need the numpy functionalities, use `numpy=True`.
-
-        """
+    def _get_raw_data(self, phenotype):
+        """Get the raw HDF5 dataset."""
         try:
-            data = self.data["data/" + str(phenotype)]
+            return self.data["data/{}".format(phenotype)]
         except KeyError:
             raise KeyError("No data for '{}'.".format(phenotype))
 
-        if not numpy:
-            return data
-
-        data = np.array(data)
+    def get_data(self, phenotype):
+        """Get a phenotype vector as a numpy array."""
         # Get metadata.
         meta = self.get_phenotype(phenotype)
-        if meta["variable_type"] in ("continuous", "discrete"):
+        if meta["variable_type"] == "discrete":
+            return self._get_discrete_data(phenotype)
+
+        data = np.array(self._get_raw_data(phenotype))
+
+        if meta["variable_type"] == "continuous":
             return data
 
-        return self._represent_factor_data(data, meta)
+        elif meta["variable_type"] == "factor":
+            return self._represent_factor_data(data, meta)
+
+        else:
+            raise ValueError(
+                "Invalid variable type '{}' for '{}'.".format(
+                    meta["variable_type"], phenotype
+                )
+            )
+
+    def _get_discrete_data(self, phenotype):
+        unaffected = np.full(self.n, False, dtype=bool)
+        cur = self.get_phenotype(phenotype)["parent"]
+        while cur is not None:
+            meta = self.get_phenotype(cur)
+            if meta["variable_type"] == "discrete":
+                unaffected[self.get_data(cur) == 0] = True
+
+            cur = meta["parent"]
+
+        data = np.array(self._get_raw_data(phenotype))
+
+        data[unaffected] = 0
+        return data
 
     def _represent_factor_data(self, data, meta):
         # Get the code.
@@ -1070,7 +1089,7 @@ class CohortManager(object):
                                  "factor.".format(phenotype))
 
             # Add the data.
-            mask = self.get_data(phenotype, numpy=True) == 1.0
+            mask = self.get_data(phenotype) == 1.0
             if np.any(filled & mask):
                 raise ValueError(
                     "Some discrete variables in the provided set are not "
@@ -1119,7 +1138,6 @@ class CohortManager(object):
                 raise CohortDataError(s)
 
         self.check_phenotypes_have_data(_print)
-        self.hierarchical_reclassify()
 
     def check_phenotypes_have_data(self, printer):
         """Check that all the phenotypes in the database have data entries."""
@@ -1137,44 +1155,6 @@ class CohortManager(object):
         logger.debug("Phenotype in the database are consistent with the "
                      "binary data store.")
         return True
-
-    def hierarchical_reclassify(self):
-        """Reclassify controls according to the PhenotypeTree.
-
-        Let u, v be discrete phenotypes, where u is the parent of v.
-        if patient i in unaffected for u, he should be unaffected for v.
-        This function adjusts the data container to reflect this constraint.
-
-        """
-        logger.info("Reclassifying case/control data with respect to the "
-                    "hierarchical structure in the phenotype description.")
-        if self.tree is None:
-            raise Exception("Commit the manager to generate the hierarchical "
-                            "phenotype representation.")
-
-        # Use a depth first traversal to reclassify controls.
-        for node in self.tree.depth_first_traversal():
-            if node.parent is None:
-                continue
-
-            # Check if child and parent are discrete.
-            if node.data.variable_type != "discrete":
-                continue
-
-            if node.parent.data.variable_type != "discrete":
-                continue
-
-            data = self.get_data(node.data.name, numpy=True)
-            missing = np.isnan(data)
-
-            parent_data = self.get_data(node.data.parent, numpy=True)
-            parent_control = parent_data == 0
-
-            # Reclassification.
-            data[missing & parent_control] = 0
-
-            # Write to HDF5
-            self.data["data/" + node.data.name][...] = data
 
     def get_number_unaffected(self, phenotype):
         """Robust function to get the number of unaffected samples for a given
@@ -1214,7 +1194,7 @@ class CohortManager(object):
         for node in path:
             if node.data.variable_type == "discrete":
                 # Get the data vector.
-                data = self.get_data(node.data.name, numpy=True)
+                data = self.get_data(node.data.name)
                 if unaffected is None:
                     unaffected = (data == 0)
                 else:
@@ -1226,7 +1206,7 @@ class CohortManager(object):
         """Get the true number of missing data points."""
         n_unaffected = self.get_number_unaffected(phenotype)
         meta = self.get_phenotype(phenotype)
-        data = self.get_data(phenotype, numpy=True)
+        data = self.get_data(phenotype)
 
         if meta["variable_type"] == "discrete":
             return np.sum(np.isnan(data))
@@ -1250,7 +1230,7 @@ class CohortManager(object):
         >>> obese = (v("mass") / (v("height") ** 2)) > 30
 
         """
-        data = self.get_data(name, numpy=True)
+        data = self.get_data(name)
         meta = self.get_phenotype(name)
         if meta["variable_type"] not in ("continuous", "discrete"):
             raise TypeError("The virtual variable system can only be used "

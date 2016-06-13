@@ -81,7 +81,6 @@ class TestManager(unittest.TestCase):
         self.assertEqual("dummy_pheno", out["name"])
         self.assertEqual("dummy", out["variable_type"])
 
-
     def test_get_phenotype(self):
         """Test get missing phenotype."""
         with self.assertRaises(KeyError):
@@ -297,14 +296,14 @@ class TestManager(unittest.TestCase):
         v = np.array([0, np.nan, 1, 0, 1, np.nan])
         self.manager.add_data("phenotype1", v)
         np.testing.assert_array_equal(
-            v, self.manager.get_data("phenotype1", numpy=True)
+            v, self.manager.get_data("phenotype1")
         )
 
         v = [0, 1, 0, 1, 0, 0]
         self.manager.add_data("phenotype2", v)
         np.testing.assert_array_equal(
             np.array(v, dtype=float),
-            self.manager.get_data("phenotype2", numpy=True)
+            self.manager.get_data("phenotype2")
         )
 
         # This should raise a ValueError because it's not only 0 and 1.
@@ -547,7 +546,7 @@ class TestManager(unittest.TestCase):
         nans = np.array([0, 0, 0, 0, 0, 1, 0, 0, 1], dtype=bool)
         self.manager.add_data("gender", [1, 2, 1, 1, 2, np.nan, 2, 1, np.nan])
 
-        v = self.manager.get_data("gender", numpy=True)
+        v = self.manager.get_data("gender")
         ans = pd.Series(["male", "female", "male", "male", "female", np.nan,
                          "female", "male", np.nan]).astype("category")
 
@@ -565,7 +564,7 @@ class TestManager(unittest.TestCase):
         nans = np.array([0, 0, 0, 0, 0, 1, 0, 0, 1], dtype=bool)
         self.manager.add_data("gender", [0, 1, 0, 0, 1, np.nan, 1, 0, np.nan])
 
-        v = self.manager.get_data("gender", numpy=True)
+        v = self.manager.get_data("gender")
 
         ans = pd.Series(["male", "female", "male", "male", "female", np.nan,
                          "female", "male", np.nan])
@@ -575,6 +574,48 @@ class TestManager(unittest.TestCase):
         self.assertTrue(
             np.all(v.iloc[~nans] == ans.iloc[~nans])
         )
+
+    def test_discrete_reclassify(self):
+        """Test the dynamic reclassification with respect to the hierarchy.
+
+        A -> B -> C
+
+        Observed:
+           a b c d e f g h i
+        A: 0 1 0 0 1 N 1 0 1
+        B: N 1 N N 0 N 0 N 1
+        C: N 0 N N N N N N 1
+
+        Reality:
+        A: 0 1 0 0 1 N 1 0 1
+        B: 0 1 0 0 0 N 0 0 1
+        C: 0 0 0 0 0 N 0 0 1
+
+        """
+        self.manager.set_samples(list("abcdefghi"))
+        self.manager.add_phenotypes([
+            dict(name="A", variable_type="discrete"),
+            dict(name="B", variable_type="discrete", parent="A"),
+            dict(name="C", variable_type="discrete", parent="B"),
+        ])
+
+        self.manager.add_data("A", [0, 1, 0, 0, 1, np.nan, 1, 0, 1])
+        self.manager.add_data("B", [np.nan, 1, np.nan, np.nan, 0, np.nan, 0,
+                                    np.nan, 1])
+        self.manager.add_data("C", [np.nan, 0, np.nan, np.nan, np.nan, np.nan,
+                                    np.nan, np.nan, 1])
+
+        self.manager.commit()
+
+        expected = {
+            "A": np.array([0, 1, 0, 0, 1, np.nan, 1, 0, 1]),
+            "B": np.array([0, 1, 0, 0, 0, np.nan, 0, 0, 1]),
+            "C": np.array([0, 0, 0, 0, 0, np.nan, 0, 0, 1]),
+        }
+        for phenotype, answer in expected.items():
+            np.testing.assert_array_equal(
+                self.manager.get_data(phenotype), answer
+            )
 
     def test_get_code_names(self):
         """Test getting a list of code names."""

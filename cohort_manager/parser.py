@@ -284,7 +284,7 @@ def _handle_recode_as_factors(manager, node):
         manager.add_code(code_name, code_int, phenotype)
 
         # Encode the data.
-        data[manager.get_data(phenotype, numpy=True) == 1] = code_int
+        data[manager.get_data(phenotype) == 1] = code_int
 
     # The remaining values (still -1) will be missing (nan).
     data[data == -1] = np.nan

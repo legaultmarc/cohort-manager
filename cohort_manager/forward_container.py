@@ -73,7 +73,7 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
             if self.permutation is not None:
                 data = self.permutation.get_data(name)
             else:
-                data = self.manager.get_data(name, numpy=True)
+                data = self.manager.get_data(name)
         except KeyError:
             raise ValueError("'{}' is not in the database.".format(name))
 
