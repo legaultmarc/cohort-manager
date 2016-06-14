@@ -13,6 +13,7 @@ import numpy as np
 
 from .core import CohortManager, UnknownSamplesError, vector_map
 from . import inference
+from . import types
 
 
 ENGINES = {}
@@ -99,23 +100,27 @@ def parse_excel(filename, cohort_name):
                     continue
 
                 index = variable_to_index[variable]
-                data[variable].append(line[index])
+                if line[index] in metadata_dict["known_missings"]:
+                    data[variable].append("")
+                else:
+                    data[variable].append(line[index])
 
     manager = CohortManager(cohort_name)
 
     # Type cast and insert.
     for variable in data.keys():
-        _type = variables.loc[variable, "variable_type"]
-        if not _type:
+        try:
+            _type = types.type_str(variables.loc[variable, "variable_type"])
+        except Exception:
             logger.warning("Could not load variable '{}' because of it has an "
                            "unknown type.".format(variable))
             continue
 
-        if _type == "discrete":
+        if _type.subtype_of(types.Discrete):
             # Encode manually.
             # Get the code.
-            affected = variables.loc[variable, "affected"]
-            unaffected = variables.loc[variable, "unaffected"]
+            affected = float(variables.loc[variable, "affected"])
+            unaffected = float(variables.loc[variable, "unaffected"])
 
             v = np.empty(len(data[variable]), dtype=np.float)
             for i in range(v.shape[0]):
@@ -136,11 +141,17 @@ def parse_excel(filename, cohort_name):
 
             data[variable] = v
 
+        # We don't do recoding for non-discrete variables.
         else:
-            data[variable] = inference.cast_type(data[variable], _type)[1]
-
-        if _type == "year":
-            _type = "continuous"
+            try:
+                data[variable] = inference.cast_type(data[variable], _type)[1]
+            except ValueError:
+                logger.warning(
+                    "Could not insert variable '{}' because its data type "
+                    "({}) can't be automatically encoded."
+                    "".format(variable, _type.__name__)
+                )
+                continue
 
         # Check if it is a new cohort and set or check the sample order.
         if not (manager["frozen"] == "yes"):
@@ -159,13 +170,17 @@ def parse_excel(filename, cohort_name):
         icd10 = variables.loc[variable, "icd10"]
 
         manager.add_phenotype(
-            name=variable, variable_type=_type, description=description,
-            icd10=icd10
+            name=variable, variable_type=_type.__name__,
+            description=description, icd10=icd10
         )
 
-        manager.add_data(
-            variable, data[variable]
-        )
+        try:
+            manager.add_data(
+                variable, data[variable]
+            )
+        except types.InvalidValues as e:
+            logger.warning(e.message)
+            manager.delete(variable, _db_only=True)
 
     manager.commit()
     return True

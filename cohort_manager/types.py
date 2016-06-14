@@ -62,6 +62,27 @@ def estimate_num_distinct(v):
         return len(np.unique(np.random.choice(v, 5000, replace=False)))
 
 
+def generate_type_graph():
+    """Generate a dot file representing the type graph."""
+    with open("cohort_manager_types_graph.dot", "w") as f:
+        print("digraph cohort_manager_type_graph {", file=f)
+        for name, cls in TYPES_DICT.items():
+            for child in cls.__subclasses__():
+                print(
+                    "\t{} -> {}".format(cls.__name__, child.__name__), file=f
+                )
+        print("}", file=f)
+
+
+def _get_numpy_float_array(values):
+    try:
+        return np.array(values, dtype=np.float)
+    except ValueError:
+        pass
+
+    raise InvalidValues("Some values are non-numeric.")
+
+
 class Type(object):
     """Parent type for all types."""
     @staticmethod
@@ -72,6 +93,31 @@ class Type(object):
         error message if relevant.
         """
         raise NotImplementedError()
+
+    @staticmethod
+    def encode(values):
+        """Method that gets called when storing the data in the HDF5 dataset.
+
+        This can be overriden by children who need a special encoding step.
+
+        .. note::
+
+            This function gets called automatically and can be used to encode
+            arrays that are not handled correctly by H5PY. It should not be
+            used to process information.
+
+        """
+        return values
+
+    @staticmethod
+    def decode(hdf5_dataset):
+        """Method that is used to restore data from HDF5.
+
+        If a special encoding method was provided, implementing this method
+        is essential.
+
+        """
+        return np.array(hdf5_dataset)
 
     @classmethod
     def subtype_of(cls, parent):
@@ -123,11 +169,7 @@ class Continuous(Type):
         prompting the user to verify the data type.
 
         """
-        try:
-            values = np.array(values, dtype=np.float)
-        except ValueError:
-            raise InvalidValues("Non-numeric values in Continuous variable.")
-
+        values = _get_numpy_float_array(values)
         values = values[~np.isnan(values)]
 
         # Factor check.
@@ -156,8 +198,8 @@ class Integer(Continuous):
     @staticmethod
     def check(values):
         super(Integer, Integer).check(values)
-
-        data = np.array(values)
+        data = _get_numpy_float_array(values)
+        data = data[~np.isnan(data)]
         if np.nansum((data * 10) % 10) != 0:
             raise InvalidValues(
                 "Some of the provided values are not integers."
@@ -168,11 +210,19 @@ class PositiveInteger(Integer):
     @staticmethod
     def check(values):
         super(PositiveInteger, PositiveInteger).check(values)
-
-        data = np.array(values)
+        data = _get_numpy_float_array(values)
         if np.any(data < 0):
+            examples = np.unique(data[np.where(data < 0)[0]])[:4]
+            examples = ", ".join([str(i) for i in examples])
             raise InvalidValues("Negative values were observed while the type "
-                                "is PositiveInteger.")
+                                "is PositiveInteger (e.g. {})."
+                                "".format(examples))
+
+
+class Year(PositiveInteger):
+    @staticmethod
+    def check(values):
+        super(Year, Year).check(values)
 
 
 class NegativeInteger(Integer):
@@ -180,10 +230,13 @@ class NegativeInteger(Integer):
     def check(values):
         super(NegativeInteger, NegativeInteger).check(values)
 
-        data = np.array(values)
+        data = _get_numpy_float_array(values)
         if np.any(data > 0):
+            examples = np.unique(data[np.where(data > 0)[0]])[:4]
+            examples = ", ".join([str(i) for i in examples])
             raise InvalidValues("Positive values were observed while the type "
-                                "is NegativeInteger.")
+                                "is NegativeInteger (e.g. {})."
+                                "".format(examples))
 
 
 class Factor(Type):
@@ -196,6 +249,7 @@ class Factor(Type):
 
         """
         # Check if the set of observed values is consistent with the code.
+        values = _get_numpy_float_array(values)
         observed = set(values[~np.isnan(values)])
         expected = set([i[0] for i in mapping])
         extra = observed - expected
@@ -221,8 +275,11 @@ class Date(Type):
                 valid = False
 
             if not valid:
-                raise InvalidValues("Some of the values are not ISO 8601 "
-                                    "dates (e.g. 2016-05-28).")
+                raise InvalidValues(
+                    "Some of the values are not ISO 8601 dates. The expected "
+                    "format is: YYYY-MM-DD and some of the provided values "
+                    "had the following form: {}.".format(i)
+                )
 
     @classmethod
     def predicate(cls, s):
@@ -238,6 +295,13 @@ class Date(Type):
         return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
     @staticmethod
+    def date_to_int(date):
+        if date is None:
+            return date
+
+        return date.year * 10000 + date.month * 100 + date.day
+
+    @staticmethod
     def int_to_date(i):
         """Takes an int representing a date and converts it to a datetime
         object.
@@ -245,11 +309,43 @@ class Date(Type):
         The representation is simply: YYYMMDD
 
         """
+        if i is None or np.isnan(i):
+            return i
+
+        i = int(i)
         year = i // 10000
         i -= year * 10000
         month = i // 100
         day = i - month * 100
         return datetime.date(year=year, month=month, day=day)
+
+    @classmethod
+    def encode(cls, values, from_type=str):
+        if not values:
+            return values
+
+        # If items are already dates, we just convert to int.
+        if from_type is datetime.date:
+            return np.array([cls.date_to_int(d) for d in values])
+
+        # Else we assume they are strings and parse the dates.
+        if from_type is str:
+            n = len(values)
+            out = np.full(n, np.nan)
+            for i in range(n):
+                try:
+                    date = cls._parse_date(values[i])
+                except Exception:
+                    date = None
+
+                if date:
+                    out[i] = cls.date_to_int(date)
+
+            return out
+
+    @classmethod
+    def decode(cls, values):
+        return [cls.int_to_date(i) for i in values]
 
 
 class PastDate(Date):
@@ -259,7 +355,10 @@ class PastDate(Date):
         for i in values:
             date = cls._parse_date(i)
             if date > datetime.datetime.today().date():
-                raise InvalidValues("Some of the values are future dates.")
+                raise InvalidValues(
+                    "Some of the values are future dates (e.g. {})."
+                    "".format(i)
+                )
 
 
 TYPES_DICT = _build_types_dict()

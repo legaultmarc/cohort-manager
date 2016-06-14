@@ -44,6 +44,7 @@ from cohort_manager.parser import parse_yaml
 from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
 from cohort_manager.drugs.drug_search import find_drugs_in_query
+import cohort_manager.types as types
 
 
 plt.style.use("ggplot")
@@ -196,8 +197,11 @@ class DefaultPrinter(object):
 class ImagePrinter(DefaultPrinter):
     def __call__(self, res):
         res = json.loads(res.decode("utf-8"))
-        print("Opening generated image ('{}').".format(res["image_path"]))
-        webbrowser.open("file://" + res["image_path"])
+        try:
+            print("Opening generated image ('{}').".format(res["image_path"]))
+            webbrowser.open("file://" + res["image_path"])
+        except KeyError:
+            print("Could not generate histogram.")
 
 
 def _handle_command(raw_command):
@@ -524,7 +528,9 @@ def info(phen_or_command, drug_code=None):
         n_missing, n_total, n_missing / n_total * 100
     ), file=message)
 
-    if meta["variable_type"] == "discrete":
+    t = types.type_str(meta["variable_type"])
+
+    if t.subtype_of(types.Discrete):
         # Show information on prevalence.
         n_cases = np.sum(data == 1)
         n_controls = np.sum(data == 0)
@@ -532,14 +538,14 @@ def info(phen_or_command, drug_code=None):
             n_cases, n_controls, n_cases / (n_cases + n_controls) * 100
         ), file=message)
 
-    elif meta["variable_type"] == "continuous":
+    elif t.subtype_of(types.Continuous):
         mean = np.nanmean(data)
         std = np.nanstd(data)
         print(u"\tµ = {}, σ = {}".format(mean, std), file=message)
         print("\tmin = {}, max = {}".format(np.nanmin(data), np.nanmax(data)),
               file=message)
 
-    elif meta["variable_type"] == "factor":
+    elif t.subtype_of(types.Factor):
         print("\nCounts (rate):", file=message)
         n = data.shape[0]
         for name, count in data.value_counts().iteritems():
@@ -581,8 +587,9 @@ def boxplot(phenotype):
     """
     data, meta = _get_data_meta(phenotype)
     data = data[~np.isnan(data)]
-    if meta["variable_type"] != "continuous":
-        raise REPLException("Can't draw boxplot for non-continuous phenotype "
+    _type = types.type_str(meta["variable_type"])
+    if _type.subtype_of(types.Continuous):
+        raise REPLException("Can't draw boxplot for non-continuous variable "
                             "('{}').".format(phenotype))
 
     fig, ax = plt.subplots(1, 1)
@@ -622,8 +629,11 @@ def scatter(y, x):
     datay, metay = _get_data_meta(y)
     datax, metax = _get_data_meta(x)
 
-    if not (metax["variable_type"] == "continuous" and
-            metay["variable_type"] == "continuous"):
+    typex = types.subtype_of(metax["variable_type"])
+    typey = types.subtype_of(metay["variable_type"])
+
+    if not (typex.subtype_of(types.Continuous) and
+            typey.subtype_of(types.Continuous)):
         raise REPLException("Can only plot scatter for continuous variables.")
 
     not_missing = ~ (np.isnan(datax) | np.isnan(datay))
@@ -652,12 +662,10 @@ def histogram(phenotype, nbins=None):
 
     """
     data, meta = _get_data_meta(phenotype)
-    if meta["variable_type"] not in ("continuous", "discrete"):
-        raise REPLException("Could not generate histogram for '{}' variable."
-                            "".format(meta["variable_type"]))
+    t = types.type_str(meta["variable_type"])
 
     data = data[~np.isnan(data)]
-    if meta["variable_type"] == "continuous":
+    if t.subtype_of(types.Continuous):
         # Histogram.
         if nbins:
             plt.hist(data, bins=nbins)
@@ -666,11 +674,15 @@ def histogram(phenotype, nbins=None):
 
         plt.xlabel(phenotype)
 
-    elif meta["variable_type"] == "discrete":
+    elif t.subtype_of(types.Discrete):
         # Bar plot.
         plt.bar((0.1, 0.4), (np.sum(data == 0), np.sum(data == 1)), width=0.1)
         plt.xticks((0.15, 0.45), ("control", "case"))
         plt.xlim((0, 0.6))
+
+    else:
+        raise REPLException("Could not generate histogram for '{}' variable."
+                            "".format(meta["variable_type"]))
 
     filename = "cohort_plot.png"
     plt.savefig(filename, dpi=300)
@@ -690,7 +702,7 @@ def normal_qq_plot(phenotype):
     """
     data, meta = _get_data_meta(phenotype)
     data = data[~np.isnan(data)]
-    if meta["variable_type"] != "continuous":
+    if types.type_str(meta["variable_type"]).subtype_of(types.Continuous):
         raise REPLException(
             "Could not create QQ plot for {} variable '{}'.".format(
                 meta["variable_type"], phenotype

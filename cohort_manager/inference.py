@@ -16,51 +16,11 @@ import matplotlib.pyplot as plt
 import matplotlib.colors
 from scipy.special import digamma
 
-from . import stats
 from . import core
+from . import types
 
 plt.style.use("ggplot")
 logger = logging.getLogger(__name__)
-
-
-def estimate_num_distinct(v):
-    """Estimate the number of distinct elements in vector."""
-    try:
-        v = v[~np.isnan(v)]
-    except TypeError:  # Not a vector of floats.
-        pass
-
-    if v.shape[0] <= 5000:
-        return len(np.unique(v))
-    else:
-        # len(np.unique) is ~3x faster than len(set(x))
-        return len(np.unique(np.random.choice(v, 5000, replace=False)))
-
-
-def find_overrepresented_outlier(v):
-    """Finds overrepresented outliers.
-
-    This returns the overrepresented outlier if present. It returns None if
-    it doesn't find anything suspicious.
-
-    These values could mean that a symbol for missing values (e.g. -9) was
-    used.
-    """
-    median, mad = stats.median_absolute_deviation(v, return_median=True)
-
-    outliers = v[(v < median - 3 * mad) | (v > median + 3 * mad)]
-
-    n = outliers.shape[0]
-    # We tolerate a rate of outliers of less than 1%.
-    if n <= 0.01 * v.shape[0]:
-        return None
-
-    counter = collections.Counter(outliers)
-    most_common_outlier, count = counter.most_common(1)[0]
-
-    # If the most common outlier is more than half the cases, we return it.
-    if count >= n / 2:
-        return most_common_outlier
 
 
 def infer_type(li, max_size=5000, known_missings=None):
@@ -246,25 +206,29 @@ def infer_primitive_type(value):
 def cast_type(values, data_type):
     """Cast a list of values into a numpy array of the given type.
 
-    Possible types are 'discrete', 'continuous' or 'year'.
-
     This function will return the value mapping if the type is 'discrete'.
 
     """
-    if data_type == "discrete":
+    if data_type is None:
+        return None, np.array(values)
+
+    if data_type.subtype_of(types.Discrete):
         return _encode_discrete(values)
 
-    if data_type == "year" or data_type == "continuous":
+    if data_type.subtype_of(types.Continuous):
         out = []
         for i in values:
             try:
                 out.append(float(i))
             except Exception:
                 out.append(np.nan)
-        return None, np.array(out, dtype=np.double)
+        return None, np.array(out, dtype=np.float)
 
-    # Other possibilities are unique_key and text which are both not typecast.
-    return None, np.array(values)
+    raise ValueError(
+        "Automatic type cast to '{}' is not yet supported.".format(
+            data_type.__name__
+        )
+    )
 
 
 def _encode_discrete(values):
@@ -303,14 +267,16 @@ def _encode_discrete(values):
         unaffected = counter.most_common()[0][0]
         affected = counter.most_common()[1][0]
         code = {1.0: affected, 0.0: unaffected}
-        return code, core.vector_map(values, code)
+        return code, core.vector_map(
+            values, [(unaffected, 0.0), (affected, 1.0)]
+        )
 
     # Unable to encode as a discrete variable.
     raise ValueError("Unable to encode values as a discrete variable.")
 
 
-def build_relationship_matrix(dataset, inferred_types):
-    """Build a relationship matrix from a dataset.
+def build_mi_matrix(dataset, inferred_types):
+    """Build the pairwise mutual information matrix.
 
     The dataset is a list of (col1, col2, mutual information).
 
@@ -337,7 +303,7 @@ def build_relationship_matrix(dataset, inferred_types):
     return names, np.array(weights)
 
 
-def hierarchical_clustering(mat, examples, inferred_types):
+def hierarchical_clustering(mat, examples, inferred_types, codes):
     names, weights = mat
     weights[weights == 0] = 0.01
     distances = 1 / weights
@@ -371,23 +337,26 @@ def hierarchical_clustering(mat, examples, inferred_types):
     for col in rows:
         col = names[col]
 
-        data_type = inferred_types[col]
+        try:
+            data_type = types.type_str(inferred_types[col])
+        except Exception:
+            data_type = None
+
         v = examples[col].copy()
         try:
             v[np.isnan(v)] = -1
         except TypeError:
             v = np.full_like(v, -1, dtype=float)
 
-        # Continuous variables are not plotted.
-        if data_type in ("continuous", "year"):
-            # Don't plot.
-            v = np.full_like(v, -1, dtype=float)
-
-        if data_type == "discrete":
-            # Remap 0 -> 0.5, and nan to 0
+        # Only discrete variables are plotted.
+        if data_type and data_type.subtype_of(types.Discrete):
+            # Remap wrt. to code.
             v[v == 0] = 0.5
             v[v == -1] = 0
+        else:
+            v = np.full_like(v, -1, dtype=float)
 
+        # z is the full matrix we're plotting.
         if z is None:
             z = v
         else:

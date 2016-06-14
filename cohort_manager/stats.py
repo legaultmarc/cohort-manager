@@ -2,6 +2,8 @@
 Statistical utilities for the cohort manager.
 """
 
+import collections
+
 import numpy as np
 
 
@@ -21,3 +23,29 @@ def median_absolute_deviation(values, q=None, return_median=False):
     if return_median:
         return (median, mad)
     return mad
+
+
+def find_overrepresented_outlier(v):
+    """Finds overrepresented outliers.
+
+    This returns the overrepresented outlier if present. It returns None if
+    it doesn't find anything suspicious.
+
+    These values could mean that a symbol for missing values (e.g. -9) was
+    used.
+    """
+    median, mad = median_absolute_deviation(v, return_median=True)
+
+    outliers = v[(v < median - 3 * mad) | (v > median + 3 * mad)]
+
+    n = outliers.shape[0]
+    # We tolerate a rate of outliers of less than 1%.
+    if n <= 0.01 * v.shape[0]:
+        return None
+
+    counter = collections.Counter(outliers)
+    most_common_outlier, count = counter.most_common(1)[0]
+
+    # If the most common outlier is more than half the cases, we return it.
+    if count >= n / 2:
+        return most_common_outlier

@@ -18,6 +18,7 @@ import os
 import pandas as pd
 
 from .. import inference
+from .. import types
 from .. import parser as cm_parser
 
 
@@ -55,16 +56,21 @@ def create_skeleton_from_file(filename, delimiter, encoding, known_missings):
     # Type cast the dataset.
     codes = {}
     for column in examples.keys():
-        code, examples[column] = inference.cast_type(
-            examples[column], inferred_types[column]
-        )
+        t = None
+        try:
+            t = types.type_str(inferred_types[column])
+        except Exception:  # Type is not supported.
+            pass
+
+        code, examples[column] = inference.cast_type(examples[column], t)
         codes[column] = code
 
     # Infer relationship between columns.
-    mat = inference.build_relationship_matrix(examples, inferred_types)
-    names, weights = mat
+    mat = inference.build_mi_matrix(examples, inferred_types)
+    names, _ = mat
 
-    clusters = inference.hierarchical_clustering(mat, examples, inferred_types)
+    clusters = inference.hierarchical_clustering(mat, examples, inferred_types,
+                                                 codes)
     name_cluster = list(zip(names, clusters))
     cluster_numbers = collections.Counter(clusters)
 

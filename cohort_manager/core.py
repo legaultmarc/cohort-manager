@@ -309,7 +309,7 @@ class CohortManager(object):
             ))
 
         # Factor variables need a code_name.
-        if issubclass(types.type_str(kwargs["variable_type"]), types.Factor):
+        if types.type_str(kwargs["variable_type"]).subtype_of(types.Factor):
             if kwargs.get("code_name") is None:
                 raise TypeError("Factor variables need a 'code_name'.")
 
@@ -317,6 +317,7 @@ class CohortManager(object):
             "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
             tuple(values)
         )
+        self.commit()
 
     def add_dummy_phenotype(self, name):
         """Insert a dummy phenotype into the database.
@@ -398,7 +399,7 @@ class CohortManager(object):
                 if (type(val) is datetime.date or val is None):
                     continue
 
-                if not _is_valid_date(val):
+                if not types.Date.predicate(val):
                     raise ValueError(bad_date_message.format(field=field))
 
         try:
@@ -515,8 +516,9 @@ class CohortManager(object):
         # Type check.
         values = np.array(values)
 
-        # Because checking for factor variables is a bit different, we catch
-        # this situation. Otherwise, we just pass the data to the relevant
+        # Because checking for factor variables is a bit different, we do
+        # additional checks.
+        # Otherwise, we just pass the data to the relevant
         # check method as defined in the types module.
         if variable_type.subtype_of(types.Factor):
             # Get the factor mapping.
@@ -531,13 +533,16 @@ class CohortManager(object):
                                       "variable '{}'. The code name is "
                                       "'{}'.".format(phenotype, code_name))
 
-            variable_type.check(values, mapping)
+            _type_check(phenotype, values, variable_type, mapping)
 
         else:
-            variable_type.check(values)
+            _type_check(phenotype, values, variable_type)
 
         # If no exception was raised, store the data.
-        self.data["data"].create_dataset(phenotype, data=values)
+        self.data["data"].create_dataset(
+            phenotype,
+            data=variable_type.encode(values)
+        )
 
     # Get information.
     def get_samples(self):
@@ -612,7 +617,7 @@ class CohortManager(object):
             for i in (0, 1):
                 if isinstance(dates[i], datetime.date):
                     dates[i] = dates[i].strftime("%Y-%m-%d")
-                elif not (dates[i] is None or _is_valid_date(dates[i])):
+                elif not (dates[i] is None or types.Date.predicate(dates[i])):
                     raise ValueError("Invalid date '{}' (not ISO 8601)."
                                      "".format(dates[i]))
 
@@ -802,8 +807,14 @@ class CohortManager(object):
                 labels[i]
             )])
 
-        v1 = np.array(self._get_raw_data(phenotype1))
-        v2 = np.array(self._get_raw_data(phenotype2))
+        v1 = np.array(self._get_raw_data(
+            phenotype1,
+            cm_type=types.type_str(meta1["variable_type"])
+        ))
+        v2 = np.array(self._get_raw_data(
+            phenotype2,
+            cm_type=types.type_str(meta2["variable_type"])
+        ))
 
         counts = np.zeros((m, n)).astype(int) - 1
         counts[0, 0] = np.sum(np.isnan(v1) & np.isnan(v2))
@@ -860,10 +871,11 @@ class CohortManager(object):
         self.cur.execute("SELECT key, value FROM code WHERE name=?", (name, ))
         return self.cur.fetchall()
 
-    def _get_raw_data(self, phenotype):
+    def _get_raw_data(self, phenotype, cm_type):
         """Get the raw HDF5 dataset."""
         try:
-            return self.data["data/{}".format(phenotype)]
+            data = self.data["data/{}".format(phenotype)]
+            return cm_type.decode(data)
         except KeyError:
             raise KeyError("No data for '{}'.".format(phenotype))
 
@@ -883,7 +895,9 @@ class CohortManager(object):
         if types.type_str(t).subtype_of(types.Discrete):
             return self._get_discrete_data(phenotype)
 
-        data = np.array(self._get_raw_data(phenotype))
+        data = np.array(
+            self._get_raw_data(phenotype, cm_type=types.type_str(t))
+        )
 
         if types.type_str(t).subtype_of(types.Continuous):
             return data
@@ -892,7 +906,6 @@ class CohortManager(object):
             return self._represent_factor_data(data, meta)
 
         else:
-            # No particular representation needed (or implemented).
             return data
 
     def _get_discrete_data(self, phenotype):
@@ -900,12 +913,13 @@ class CohortManager(object):
         cur = self.get_phenotype(phenotype)["parent"]
         while cur is not None:
             meta = self.get_phenotype(cur)
-            if meta["variable_type"] == "discrete":
+            parent_type = types.type_str(meta["variable_type"])
+            if parent_type.subtype_of(types.Discrete):
                 unaffected[self.get_data(cur) == 0] = True
 
             cur = meta["parent"]
 
-        data = np.array(self._get_raw_data(phenotype))
+        data = np.array(self._get_raw_data(phenotype, cm_type=types.Discrete))
 
         data[unaffected] = 0
         return data
@@ -942,7 +956,7 @@ class CohortManager(object):
         )
         return set([i[0] for i in self.cur.fetchall()])
 
-    def delete(self, phenotype):
+    def delete(self, phenotype, _db_only=False):
         """Remove a phenotype from the manager."""
         # Checking the phenotype is valid
         if not self.is_valid_phenotype(phenotype):
@@ -964,7 +978,7 @@ class CohortManager(object):
             )
 
         # Deleting the data if the phenotype is not a dummy one
-        if not is_dummy:
+        if not (is_dummy or _db_only):
             del self.data["data/{}".format(phenotype)]
 
         # Committing
@@ -1480,9 +1494,14 @@ def vector_map(data, _map):
     return out
 
 
-def _is_valid_date(s):
+def _type_check(name, values, _type, *check_args):
+    """Wraps type checks to provide better logging."""
+    exception = None
     try:
-        datetime.datetime.strptime(s, "%Y-%m-%d")
-        return True
-    except Exception:
-        return False
+        _type.check(values, *check_args)
+    except types.InvalidValues as e:
+        exception = e
+        logger.warning("Variable '{}' failed data type validation checks and "
+                       "cannot be inserted.".format(name))
+    if exception is not None:
+        raise exception
