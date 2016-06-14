@@ -585,8 +585,6 @@ class TestManager(unittest.TestCase):
         self.manager.add_data("C", [np.nan, 0, np.nan, np.nan, np.nan, np.nan,
                                     np.nan, np.nan, 1])
 
-        self.manager.commit()
-
         expected = {
             "A": np.array([0, 1, 0, 0, 1, np.nan, 1, 0, 1]),
             "B": np.array([0, 1, 0, 0, 0, np.nan, 0, 0, 1]),

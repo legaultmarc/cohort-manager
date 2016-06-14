@@ -8,19 +8,6 @@ from .. import inference
 
 
 class TestInference(unittest.TestCase):
-    def test_estimate_num_distinct(self):
-        """Test the estimation of the number of distinct elements."""
-        n = inference.estimate_num_distinct(np.array([1, 1, 2, 3, 1]))
-        self.assertEqual(n, 3)
-
-        # Generate a bool vector.
-        v = _generate_discrete()
-
-        self.assertEqual(inference.estimate_num_distinct(v), 2)
-
-        v = np.array(["a", "b", "a", "c", "b", "c"])
-        self.assertEqual(inference.estimate_num_distinct(v), 3)
-
     def test_infer_primitive_type(self):
         """Test inference of primitive types."""
         cases = {

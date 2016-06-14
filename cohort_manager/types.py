@@ -2,11 +2,12 @@
 Module to organize variable types.
 """
 
+import datetime
 import logging
 
 import numpy as np
 
-from . import inference
+from . import stats
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,20 @@ def type_str(s):
 def is_type_name(s):
     """Checks if a string is the name of a type."""
     return not (TYPES_DICT.get(s.lower()) is None)
+
+
+def estimate_num_distinct(v):
+    """Estimate the number of distinct elements in vector."""
+    try:
+        v = v[~np.isnan(v)]
+    except TypeError:  # Not a vector of floats.
+        pass
+
+    if v.shape[0] <= 5000:
+        return len(np.unique(v))
+    else:
+        # len(np.unique) is ~3x faster than len(set(x))
+        return len(np.unique(np.random.choice(v, 5000, replace=False)))
 
 
 class Type(object):
@@ -116,7 +131,7 @@ class Continuous(Type):
         values = values[~np.isnan(values)]
 
         # Factor check.
-        n_values = inference.estimate_num_distinct(values)
+        n_values = estimate_num_distinct(values)
 
         if n_values < 5:
             message = ("There is a lot of redundancy in the values of this "
@@ -127,7 +142,7 @@ class Continuous(Type):
             logger.warning(message)  # pragma: no cover
 
         # Outlier check.
-        common_outlier = inference.find_overrepresented_outlier(values)
+        common_outlier = stats.find_overrepresented_outlier(values)
         if common_outlier is not None:
             message = ("The value '{}' is commonly found in the tails of the "
                        "distribution. This could be because of bad coding of "
@@ -137,30 +152,38 @@ class Continuous(Type):
             logger.warning(message)  # pragma: no cover
 
 
-class PositiveInteger(Continuous):
+class Integer(Continuous):
     @staticmethod
     def check(values):
-        valid = True
-        message = ""
-        try:
-            data = np.array(values, dtype=np.float)
-        except Exception:
-            valid = False
-            message = ("Some of the provided values are non-numeric.")
+        super(Integer, Integer).check(values)
 
-        if valid:
-            if np.any(data < 0):
-                valid = False
-                message = ("Negative values were observed while the type is "
-                           "PositiveInteger.")
+        data = np.array(values)
+        if np.nansum((data * 10) % 10) != 0:
+            raise InvalidValues(
+                "Some of the provided values are not integers."
+            )
 
-            elif not np.can_cast(data, np.int):
-                valid = False
-                message = "Some of the provided values are not integers."
 
-        if not valid:
-            raise InvalidValues(message)
-        return valid
+class PositiveInteger(Integer):
+    @staticmethod
+    def check(values):
+        super(PositiveInteger, PositiveInteger).check(values)
+
+        data = np.array(values)
+        if np.any(data < 0):
+            raise InvalidValues("Negative values were observed while the type "
+                                "is PositiveInteger.")
+
+
+class NegativeInteger(Integer):
+    @staticmethod
+    def check(values):
+        super(NegativeInteger, NegativeInteger).check(values)
+
+        data = np.array(values)
+        if np.any(data > 0):
+            raise InvalidValues("Positive values were observed while the type "
+                                "is NegativeInteger.")
 
 
 class Factor(Type):
@@ -182,11 +205,61 @@ class Factor(Type):
 
 
 class Date(Type):
-    pass
+    @classmethod
+    def check(cls, values):
+        """Checks that the list of strings can be used to represent ISO 8601
+        dates.
+
+        The simple representation without the time is used (e.g. 2016-05-28).
+
+        """
+        valid = True
+        for i in values:
+            try:
+                cls._parse_date(i)
+            except Exception:
+                valid = False
+
+            if not valid:
+                raise InvalidValues("Some of the values are not ISO 8601 "
+                                    "dates (e.g. 2016-05-28).")
+
+    @classmethod
+    def predicate(cls, s):
+        """Test if a string is a valid date (returns True or False)."""
+        try:
+            cls._parse_date(s)
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _parse_date(s):
+        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
+
+    @staticmethod
+    def int_to_date(i):
+        """Takes an int representing a date and converts it to a datetime
+        object.
+
+        The representation is simply: YYYMMDD
+
+        """
+        year = i // 10000
+        i -= year * 10000
+        month = i // 100
+        day = i - month * 100
+        return datetime.date(year=year, month=month, day=day)
 
 
 class PastDate(Date):
-    pass
+    @classmethod
+    def check(cls, values):
+        super(PastDate, PastDate).check(values)
+        for i in values:
+            date = cls._parse_date(i)
+            if date > datetime.datetime.today().date():
+                raise InvalidValues("Some of the values are future dates.")
 
 
 TYPES_DICT = _build_types_dict()
