@@ -5,6 +5,7 @@ import shutil
 import numpy as np
 import pandas as pd
 
+from . import datasets
 from .. import core
 from .. import types
 
@@ -594,6 +595,19 @@ class TestManager(unittest.TestCase):
             np.testing.assert_array_equal(
                 self.manager.get_data(phenotype), answer
             )
+
+    def test_get_number_missing(self):
+        """Test the get_number_missing core API function."""
+        datasets.fill_hierarchy(self.manager)
+        answers = {
+            "grandparent_discrete": 1,
+            "parent_discrete": 1,
+            "child_date": 2,
+            "child_discrete": 2,
+            "child_continuous": 3,
+        }
+        for k in datasets.hierarchy:
+            self.assertEqual(answers[k], self.manager.get_number_missing(k))
 
     def test_get_code_names(self):
         """Test getting a list of code names."""

@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 
 from .. import types
 
@@ -121,7 +122,11 @@ class TestTypes(unittest.TestCase):
         values = list(datasets.types["date"])
         encoded = types.Date.encode(values)
         decoded = types.Date.decode(encoded)
-        self.assertEqual([types.Date._parse_date(d) for d in values], decoded)
+
+        answer = pd.to_datetime(
+            pd.Series([types.Date._parse_date(d) for d in values])
+        )
+        pd.util.testing.assert_series_equal(answer, decoded)
 
     def test_type_str(self):
         """Test the string to Type conversion."""

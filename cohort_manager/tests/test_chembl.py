@@ -1,14 +1,13 @@
 import unittest
-import psycopg2
 
-from ..drugs.chembl import ChEMBL
+from ..drugs.chembl import ChEMBL, ChEMBLNotInstalled
 
 
 NO_CHEMBL_MESSAGE = "Local ChEMBL database not installed."
 try:
     chembl = ChEMBL()
     CHEMBL_INSTALLED = True
-except psycopg2.OperationalError:
+except ChEMBLNotInstalled:
     CHEMBL_INSTALLED = False
 
 

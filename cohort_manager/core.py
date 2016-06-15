@@ -3,7 +3,6 @@
 
 from __future__ import division
 
-import collections
 import operator
 import itertools
 import logging
@@ -513,9 +512,6 @@ class CohortManager(object):
             raise ValueError("Data for '{}' is already in the database."
                              "".format(phenotype))
 
-        # Type check.
-        values = np.array(values)
-
         # Because checking for factor variables is a bit different, we do
         # additional checks.
         # Otherwise, we just pass the data to the relevant
@@ -872,7 +868,12 @@ class CohortManager(object):
         return self.cur.fetchall()
 
     def _get_raw_data(self, phenotype, cm_type):
-        """Get the raw HDF5 dataset."""
+        """Get the non-processed data.
+
+        The only data manipulation is the type-level decode (which, by
+        default, converts the dataset to a numpy array).
+
+        """
         try:
             data = self.data["data/{}".format(phenotype)]
             return cm_type.decode(data)
@@ -892,35 +893,38 @@ class CohortManager(object):
                 "type: {}.".format(phenotype, t)
             )
 
+        # Discrete phenotypes are explicitly recoded to account for unaffected
+        # parents.
         if types.type_str(t).subtype_of(types.Discrete):
             return self._get_discrete_data(phenotype)
 
-        data = np.array(
-            self._get_raw_data(phenotype, cm_type=types.type_str(t))
-        )
+        data = self._get_raw_data(phenotype, cm_type=types.type_str(t))
 
-        if types.type_str(t).subtype_of(types.Continuous):
-            return data
-
-        elif types.type_str(t).subtype_of(types.Factor):
+        # Factor variables are returned as pandas series.
+        if types.type_str(t).subtype_of(types.Factor):
             return self._represent_factor_data(data, meta)
 
-        else:
-            return data
+        # Any other variable types are returned as is.
+        return data
 
-    def _get_discrete_data(self, phenotype):
+    def _check_unaffected_parent_variables(self, phenotype):
         unaffected = np.full(self.n, False, dtype=bool)
         cur = self.get_phenotype(phenotype)["parent"]
+
         while cur is not None:
             meta = self.get_phenotype(cur)
-            parent_type = types.type_str(meta["variable_type"])
-            if parent_type.subtype_of(types.Discrete):
-                unaffected[self.get_data(cur) == 0] = True
+            _type = types.type_str(meta["variable_type"])
+            if _type.subtype_of(types.Discrete):
+                data = self._get_raw_data(cur, cm_type=types.Discrete)
+                unaffected[data == 0] = True
 
             cur = meta["parent"]
 
-        data = np.array(self._get_raw_data(phenotype, cm_type=types.Discrete))
+        return unaffected
 
+    def _get_discrete_data(self, phenotype):
+        unaffected = self._check_unaffected_parent_variables(phenotype)
+        data = self._get_raw_data(phenotype, cm_type=types.Discrete)
         data[unaffected] = 0
         return data
 
@@ -1094,71 +1098,34 @@ class CohortManager(object):
                      "binary data store.")
         return True
 
-    def get_number_unaffected(self, phenotype):
-        """Robust function to get the number of unaffected samples for a given
-        phenotype.
-
-        If the parent of a variable is unaffected (only valid for discrete
-        variables), then it is unaffected, even though it will be marked as
-        NA in the HDF5 container.
-
-        .. warning::
-            This does not take into account arbitrary factor values to identify
-            unaffected individuals.
-
-        """
-        # Find the node from it's root.
-        found = False
-        for node in self.tree.depth_first_traversal():
-            if node.data.name == phenotype:
-                found = True
-                break
-
-        if not found:
-            raise ValueError(
-                "Phenotype '{}' is not in database.".format(phenotype)
-            )
-
-        # Walk back from the node to the root.
-        cur = node
-        path = collections.deque([cur])
-        while cur.parent:
-            path.appendleft(cur.parent)
-            cur = cur.parent
-
-        # Walk the path to find all the unaffected individuals as marked in the
-        # hierarchy.
-        unaffected = None
-        for node in path:
-            _type = types.type_str(node.data.variable_type)
-            if _type.subtype_of(types.Discrete):
-                # Get the data vector.
-                data = self.get_data(node.data.name)
-                if unaffected is None:
-                    unaffected = (data == 0)
-                else:
-                    unaffected |= (data == 0)
-
-        return np.sum(unaffected) if unaffected is not None else 0
-
     def get_number_missing(self, phenotype):
         """Get the true number of missing data points."""
-        n_unaffected = self.get_number_unaffected(phenotype)
         meta = self.get_phenotype(phenotype)
         data = self.get_data(phenotype)
 
         t = meta["variable_type"]
 
+        # For discrete data, unaffected individuals are automatically
+        # reclassified.
         if types.type_str(t).subtype_of(types.Discrete):
             return np.sum(np.isnan(data))
 
-        elif types.type_str(t).subtype_of(types.Factor):
+        n_unaffected = np.sum(
+            self._check_unaffected_parent_variables(phenotype)
+        )
+
+        # Dates and Factors are returned as pandas series.
+        encoded_as_series = (
+            types.type_str(t).subtype_of(types.Factor) or
+            types.type_str(t).subtype_of(types.Date)
+        )
+        if encoded_as_series:
             nans = np.sum(data.isnull())
             return nans - n_unaffected
 
-        elif types.type_str(t).subtype_of(types.Continuous):
-            nans = np.sum(np.isnan(data))
-            return nans - n_unaffected
+        # Generic case.
+        nans = np.sum(np.isnan(data))
+        return nans - n_unaffected
 
     def variable(self, name):
         """Returns a variable object usable to create virtual phenotypes.
@@ -1175,7 +1142,9 @@ class CohortManager(object):
         """
         data = self.get_data(name)
         meta = self.get_phenotype(name)
-        if meta["variable_type"] not in ("continuous", "discrete"):
+        t = types.type_str(meta["variable_type"])
+        if not (t.subtype_of(types.Continuous) or
+                t.subtype_of(types.Discrete)):
             raise TypeError("The virtual variable system can only be used "
                             "with continuous and discrete variables.")
         return _Variable(data)

@@ -6,6 +6,7 @@ import datetime
 import logging
 
 import numpy as np
+import pandas as pd
 
 from . import stats
 
@@ -269,8 +270,18 @@ class Date(Type):
         """
         valid = True
         for i in values:
+            missing = i is None
             try:
-                cls._parse_date(i)
+                if np.isnan(i):
+                    missing = True
+            except TypeError:
+                pass
+
+            if missing:
+                continue
+
+            try:
+                date = cls._parse_date(i)
             except Exception:
                 valid = False
 
@@ -279,6 +290,20 @@ class Date(Type):
                     "Some of the values are not ISO 8601 dates. The expected "
                     "format is: YYYY-MM-DD and some of the provided values "
                     "had the following form: {}.".format(i)
+                )
+
+            one_day = datetime.timedelta(days=1)
+            bounds = (
+                pd.Timestamp.min.to_datetime().date() + one_day,
+                pd.Timestamp.max.to_datetime().date() - one_day,
+            )
+
+            if not (bounds[0] < date < bounds[1]):
+                raise InvalidValues(
+                    "Because date are stored using Pandas, they are encoded "
+                    "with nanosecond resolution and need to be between "
+                    "bounds defined by {} and {}. The following date is "
+                    "out of these bounds: {}.".format(*bounds, date)
                 )
 
     @classmethod
@@ -345,7 +370,7 @@ class Date(Type):
 
     @classmethod
     def decode(cls, values):
-        return [cls.int_to_date(i) for i in values]
+        return pd.to_datetime(pd.Series([cls.int_to_date(i) for i in values]))
 
 
 class PastDate(Date):
