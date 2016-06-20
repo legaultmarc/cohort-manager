@@ -3,3 +3,4 @@
 *.so
 version.py
 docs/_build
+docs/drawings

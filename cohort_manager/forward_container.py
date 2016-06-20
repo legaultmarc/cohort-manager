@@ -15,6 +15,7 @@ import numpy as np
 import scipy.stats
 
 from . import core
+from . import types
 
 
 logger = logging.getLogger(__name__)
@@ -37,20 +38,20 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
         n = len(names)
         mat = np.zeros((n, n))
 
+        def _get_correlation(phen1, phen2):
+            return scipy.stats.pearsonr(
+                self.manager.get_data(phen1),
+                self.manager.get_data(phen2)
+            )[0]
+
         for i in range(n):
             for j in range(i, n):
                 if i == j:
                     mat[i, j] = 1
                 else:
-                    mat[i, j] = mat[j, i] = self._get_correlation(names[i],
-                                                                  names[j])
+                    mat[i, j] = mat[j, i] = _get_correlation(names[i],
+                                                             names[j])
         return mat
-
-    def _get_correlation(self, phen1, phen2):
-        return scipy.stats.pearsonr(
-            self.manager.get_data(phen1),
-            self.manager.get_data(phen2)
-        )[0]
 
     def get_phenotype_vector(self, variable, warn=True):
         if not self._order_is_set and warn:
@@ -69,6 +70,7 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
 
         try:
             meta = self.manager.get_phenotype(name)
+            t = types.type_str(meta["variable_type"])
             # Reorder if needed.
             if self.permutation is not None:
                 data = self.permutation.get_data(name)
@@ -77,13 +79,15 @@ class PhenotypeManagerForwardContainer(PandasPhenotypeDatabase):
         except KeyError:
             raise ValueError("'{}' is not in the database.".format(name))
 
-        if meta["variable_type"] == "factor":
+        if t.subtype_of(types.Continuous):
+            if getattr(variable, "transformation", None):
+                data = apply_transformation(variable.transformation, data)
+        elif t.subtype_of(types.Discrete):
+            pass
+        else:
             raise ValueError("Forward does not support the analysis of "
                              "factors (it can't represent them using it's "
                              "variable system).")
-
-        if variable.variable_type == "continuous" and variable.transformation:
-            data = apply_transformation(variable.transformation, data)
 
         return data
 

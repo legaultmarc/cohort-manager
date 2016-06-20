@@ -462,8 +462,8 @@ class CohortManager(object):
     def set_samples(self, samples):
         """Set the sample IDs and order.
 
-        This can take either an ndarray of dtype np.string_ or a regular Python
-        array of str.
+        This can take either an ndarray of dtype `np.string_` or a regular
+        Python array of str.
 
         """
         if type(samples) is np.ndarray:
