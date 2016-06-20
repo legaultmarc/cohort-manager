@@ -1,0 +1,583 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cohort_manager.types &mdash; CohortManager 0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="CohortManager 0.1 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> CohortManager
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">The core API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../type_system.html">Type system</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../importing.html">Importing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hierarchy.html">Hierarchy between variables</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../../index.html">CohortManager</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+      
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      
+    <li>cohort_manager.types</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for cohort_manager.types</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Module to organize variable types.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="kn">as</span> <span class="nn">pd</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">stats</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">InvalidValues</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">message</span>
+
+
+<span class="k">def</span> <span class="nf">_build_types_dict</span><span class="p">():</span>
+    <span class="n">types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">stack</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="n">stack</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Type</span><span class="p">)</span>
+
+    <span class="k">while</span> <span class="n">stack</span><span class="p">:</span>
+        <span class="n">cur</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+        <span class="n">types</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cur</span><span class="p">)</span>
+
+        <span class="c1"># Add it&#39;s subclasses</span>
+        <span class="k">for</span> <span class="n">cls</span> <span class="ow">in</span> <span class="n">cur</span><span class="o">.</span><span class="n">__subclasses__</span><span class="p">():</span>
+            <span class="n">stack</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="n">cls</span><span class="o">.</span><span class="n">__name__</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">cls</span> <span class="k">for</span> <span class="n">cls</span> <span class="ow">in</span> <span class="n">types</span><span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">type_str</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return a type class from its name.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">TYPES_DICT</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unknown variable type &#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">is_type_name</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Checks if a string is the name of a type.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span><span class="n">TYPES_DICT</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">estimate_num_distinct</span><span class="p">(</span><span class="n">v</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Estimate the number of distinct elements in vector.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">v</span><span class="p">)]</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>  <span class="c1"># Not a vector of floats.</span>
+        <span class="k">pass</span>
+
+    <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">5000</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">v</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># len(np.unique) is ~3x faster than len(set(x))</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">5000</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="bp">False</span><span class="p">)))</span>
+
+
+<span class="k">def</span> <span class="nf">generate_type_graph</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Generate a dot file representing the type graph.&quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;cohort_manager_types_graph.dot&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">print</span><span class="p">(</span><span class="s2">&quot;digraph cohort_manager_type_graph {&quot;</span><span class="p">,</span> <span class="nb">file</span><span class="o">=</span><span class="n">f</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">cls</span> <span class="ow">in</span> <span class="n">TYPES_DICT</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">cls</span><span class="o">.</span><span class="n">__subclasses__</span><span class="p">():</span>
+                <span class="k">print</span><span class="p">(</span>
+                    <span class="s2">&quot;</span><span class="se">\t</span><span class="s2">{} -&gt; {}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">cls</span><span class="o">.</span><span class="n">__name__</span><span class="p">,</span> <span class="n">child</span><span class="o">.</span><span class="n">__name__</span><span class="p">),</span> <span class="nb">file</span><span class="o">=</span><span class="n">f</span>
+                <span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s2">&quot;}&quot;</span><span class="p">,</span> <span class="nb">file</span><span class="o">=</span><span class="n">f</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="s2">&quot;Some values are non-numeric.&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Type"><a class="viewcode-back" href="../../type_system.html#cohort_manager.types.Type">[docs]</a><span class="k">class</span> <span class="nc">Type</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Parent type for all types.&quot;&quot;&quot;</span>
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Type.check"><a class="viewcode-back" href="../../type_system.html#cohort_manager.types.Type.check">[docs]</a>    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check if a data vector is of the appropriate type.</span>
+
+<span class="sd">        Raises an InvalidValues exception as a way of conveniently passing the</span>
+<span class="sd">        error message if relevant.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Type.encode"><a class="viewcode-back" href="../../type_system.html#cohort_manager.types.Type.encode">[docs]</a>    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Method that gets called when storing the data in the HDF5 dataset.</span>
+
+<span class="sd">        This can be overriden by children who need a special encoding step.</span>
+
+<span class="sd">        .. note::</span>
+
+<span class="sd">            This function gets called automatically and can be used to encode</span>
+<span class="sd">            arrays that are not handled correctly by H5PY. It should not be</span>
+<span class="sd">            used to process information.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">values</span></div>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Type.decode"><a class="viewcode-back" href="../../type_system.html#cohort_manager.types.Type.decode">[docs]</a>    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="n">hdf5_dataset</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Method that is used to restore data from HDF5.</span>
+
+<span class="sd">        If a special encoding method was provided, implementing this method</span>
+<span class="sd">        is essential.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">hdf5_dataset</span><span class="p">)</span></div>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">subtype_of</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">parent</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">parent</span><span class="p">)</span></div>
+
+
+<span class="c1"># Type subclasses.</span>
+<span class="k">class</span> <span class="nc">Discrete</span><span class="p">(</span><span class="n">Type</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="s2">&quot;Some values are non-numeric for Discrete &quot;</span>
+                                <span class="s2">&quot;variable.&quot;</span><span class="p">)</span>
+
+        <span class="n">extra</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)]))</span> <span class="o">-</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">extra</span><span class="p">)[:</span><span class="mi">5</span><span class="p">]])</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="n">extra</span> <span class="o">+=</span> <span class="s2">&quot;, ...&quot;</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span>
+                <span class="s2">&quot;Authorized values for discrete variables are 0, 1 and np.nan.&quot;</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Unexpected values were observed ({}).&quot;</span>
+                <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">True</span>
+
+
+<span class="k">class</span> <span class="nc">Continuous</span><span class="p">(</span><span class="n">Type</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">_raise</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check that the data vector is continuous.</span>
+
+<span class="sd">        This is very hard to check.</span>
+
+<span class="sd">        After taking the outlier data points (arbitrarily defined as):</span>
+
+<span class="sd">            |x| &gt; 3 * median absolute deviation + median</span>
+
+<span class="sd">        We take the most common outlier if it consists of at least 50% of the</span>
+<span class="sd">        identified data points. If such a value exist, we suggest to the</span>
+<span class="sd">        user that it might be a weird value arising from bad missing variable</span>
+<span class="sd">        coding.</span>
+
+<span class="sd">        Also, if there is less than 5 distinct values in either the full vector</span>
+<span class="sd">        or a random sample of 5000 elements, a warning will be displayed</span>
+<span class="sd">        prompting the user to verify the data type.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)]</span>
+
+        <span class="c1"># Factor check.</span>
+        <span class="n">n_values</span> <span class="o">=</span> <span class="n">estimate_num_distinct</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_values</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;There is a lot of redundancy in the values of this &quot;</span>
+                       <span class="s2">&quot;continuous variable. Perhaps it should be modeled &quot;</span>
+                       <span class="s2">&quot;as a factor or another variable type.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_raise</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>  <span class="c1"># pragma: no cover</span>
+
+        <span class="c1"># Outlier check.</span>
+        <span class="n">common_outlier</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">find_overrepresented_outlier</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">common_outlier</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;The value &#39;{}&#39; is commonly found in the tails of the &quot;</span>
+                       <span class="s2">&quot;distribution. This could be because of bad coding of &quot;</span>
+                       <span class="s2">&quot;missing values.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">common_outlier</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">_raise</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>  <span class="c1"># pragma: no cover</span>
+
+
+<span class="k">class</span> <span class="nc">Integer</span><span class="p">(</span><span class="n">Continuous</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Integer</span><span class="p">,</span> <span class="n">Integer</span><span class="p">)</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">((</span><span class="n">data</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span> <span class="o">%</span> <span class="mi">10</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span>
+                <span class="s2">&quot;Some of the provided values are not integers.&quot;</span>
+            <span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">PositiveInteger</span><span class="p">(</span><span class="n">Integer</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">PositiveInteger</span><span class="p">,</span> <span class="n">PositiveInteger</span><span class="p">)</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">data</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="n">examples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">data</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]])[:</span><span class="mi">4</span><span class="p">]</span>
+            <span class="n">examples</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">])</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="s2">&quot;Negative values were observed while the type &quot;</span>
+                                <span class="s2">&quot;is PositiveInteger (e.g. {}).&quot;</span>
+                                <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">examples</span><span class="p">))</span>
+
+
+<span class="k">class</span> <span class="nc">Year</span><span class="p">(</span><span class="n">PositiveInteger</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Year</span><span class="p">,</span> <span class="n">Year</span><span class="p">)</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">NegativeInteger</span><span class="p">(</span><span class="n">Integer</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NegativeInteger</span><span class="p">,</span> <span class="n">NegativeInteger</span><span class="p">)</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="n">examples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]])[:</span><span class="mi">4</span><span class="p">]</span>
+            <span class="n">examples</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">])</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="s2">&quot;Positive values were observed while the type &quot;</span>
+                                <span class="s2">&quot;is NegativeInteger (e.g. {}).&quot;</span>
+                                <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">examples</span><span class="p">))</span>
+
+
+<span class="k">class</span> <span class="nc">Factor</span><span class="p">(</span><span class="n">Type</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">mapping</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check that the data vector is consistent with a factor variable.</span>
+
+<span class="sd">        This is done by looking at the code from the database and making sure</span>
+<span class="sd">        that all the observed integer codes are defined.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Check if the set of observed values is consistent with the code.</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">_get_numpy_float_array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">observed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)])</span>
+        <span class="n">expected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mapping</span><span class="p">])</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="n">observed</span> <span class="o">-</span> <span class="n">expected</span>
+        <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span><span class="s2">&quot;Unknown encoding value(s) ({}) for factor &quot;</span>
+                                <span class="s2">&quot;variable.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">extra</span><span class="p">))</span>
+
+
+<span class="k">class</span> <span class="nc">Date</span><span class="p">(</span><span class="n">Type</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Checks that the list of strings can be used to represent ISO 8601</span>
+<span class="sd">        dates.</span>
+
+<span class="sd">        The simple representation without the time is used (e.g. 2016-05-28).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="n">i</span> <span class="ow">is</span> <span class="bp">None</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+                    <span class="n">missing</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">date</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">_parse_date</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">valid</span> <span class="o">=</span> <span class="bp">False</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span>
+                    <span class="s2">&quot;Some of the values are not ISO 8601 dates. The expected &quot;</span>
+                    <span class="s2">&quot;format is: YYYY-MM-DD and some of the provided values &quot;</span>
+                    <span class="s2">&quot;had the following form: {}.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                <span class="p">)</span>
+
+            <span class="n">one_day</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">bounds</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">min</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">()</span><span class="o">.</span><span class="n">date</span><span class="p">()</span> <span class="o">+</span> <span class="n">one_day</span><span class="p">,</span>
+                <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">max</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">()</span><span class="o">.</span><span class="n">date</span><span class="p">()</span> <span class="o">-</span> <span class="n">one_day</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">date</span> <span class="o">&lt;</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span>
+                    <span class="s2">&quot;Because date are stored using Pandas, they are encoded &quot;</span>
+                    <span class="s2">&quot;with nanosecond resolution and need to be between &quot;</span>
+                    <span class="s2">&quot;bounds defined by {} and {}. The following date is &quot;</span>
+                    <span class="s2">&quot;out of these bounds: {}.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">bounds</span><span class="p">,</span> <span class="n">date</span><span class="p">)</span>
+                <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">predicate</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Test if a string is a valid date (returns True or False).&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">cls</span><span class="o">.</span><span class="n">_parse_date</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_parse_date</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">date</span><span class="p">()</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">date_to_int</span><span class="p">(</span><span class="n">date</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">date</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">date</span>
+
+        <span class="k">return</span> <span class="n">date</span><span class="o">.</span><span class="n">year</span> <span class="o">*</span> <span class="mi">10000</span> <span class="o">+</span> <span class="n">date</span><span class="o">.</span><span class="n">month</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="n">date</span><span class="o">.</span><span class="n">day</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">int_to_date</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Takes an int representing a date and converts it to a datetime</span>
+<span class="sd">        object.</span>
+
+<span class="sd">        The representation is simply: YYYMMDD</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">i</span>
+
+        <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="n">year</span> <span class="o">=</span> <span class="n">i</span> <span class="o">//</span> <span class="mi">10000</span>
+        <span class="n">i</span> <span class="o">-=</span> <span class="n">year</span> <span class="o">*</span> <span class="mi">10000</span>
+        <span class="n">month</span> <span class="o">=</span> <span class="n">i</span> <span class="o">//</span> <span class="mi">100</span>
+        <span class="n">day</span> <span class="o">=</span> <span class="n">i</span> <span class="o">-</span> <span class="n">month</span> <span class="o">*</span> <span class="mi">100</span>
+        <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">year</span><span class="o">=</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="n">day</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">from_type</span><span class="o">=</span><span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">values</span>
+
+        <span class="c1"># If items are already dates, we just convert to int.</span>
+        <span class="k">if</span> <span class="n">from_type</span> <span class="ow">is</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">cls</span><span class="o">.</span><span class="n">date_to_int</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">values</span><span class="p">])</span>
+
+        <span class="c1"># Else we assume they are strings and parse the dates.</span>
+        <span class="k">if</span> <span class="n">from_type</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">date</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">_parse_date</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="n">date</span> <span class="o">=</span> <span class="bp">None</span>
+
+                <span class="k">if</span> <span class="n">date</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">date_to_int</span><span class="p">(</span><span class="n">date</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="n">cls</span><span class="o">.</span><span class="n">int_to_date</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">values</span><span class="p">]))</span>
+
+
+<span class="k">class</span> <span class="nc">PastDate</span><span class="p">(</span><span class="n">Date</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">PastDate</span><span class="p">,</span> <span class="n">PastDate</span><span class="p">)</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">date</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">_parse_date</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">date</span> <span class="o">&gt;</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">date</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="n">InvalidValues</span><span class="p">(</span>
+                    <span class="s2">&quot;Some of the values are future dates (e.g. {}).&quot;</span>
+                    <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                <span class="p">)</span>
+
+
+<span class="n">TYPES_DICT</span> <span class="o">=</span> <span class="n">_build_types_dict</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2016, Marc-André Legault.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

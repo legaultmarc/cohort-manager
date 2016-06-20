@@ -82,6 +82,9 @@
             
                 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../api.html">The core API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../type_system.html">Type system</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../importing.html">Importing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hierarchy.html">Hierarchy between variables</a></li>
 </ul>
 
             
@@ -132,7 +135,6 @@
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
 
-<span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">operator</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">logging</span>
@@ -149,13 +151,12 @@
 <span class="kn">from</span> <span class="nn">six.moves</span> <span class="kn">import</span> <span class="nb">range</span>
 
 <span class="kn">from</span> <span class="nn">.phenotype_tree</span> <span class="kn">import</span> <span class="n">PHENOTYPE_COLUMNS</span><span class="p">,</span> <span class="n">tree_from_database</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">inference</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">types</span>
 <span class="kn">from</span> <span class="nn">.drugs.chembl</span> <span class="kn">import</span> <span class="n">ChEMBL</span>
 <span class="kn">from</span> <span class="nn">.drugs.atc</span> <span class="kn">import</span> <span class="n">get_atc_code_level</span>
 
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
-<span class="n">VARIABLE_TYPES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;discrete&quot;</span><span class="p">,</span> <span class="s2">&quot;continuous&quot;</span><span class="p">,</span> <span class="s2">&quot;factor&quot;</span><span class="p">}</span>
 <span class="n">DRUG_EXTRA_FIELDS</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">&quot;start_date&quot;</span><span class="p">,</span> <span class="s2">&quot;end_date&quot;</span><span class="p">,</span> <span class="s2">&quot;indication&quot;</span><span class="p">,</span> <span class="s2">&quot;dose&quot;</span><span class="p">,</span> <span class="s2">&quot;dose_unit&quot;</span>
 <span class="p">)</span>
@@ -200,7 +201,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">index_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_index_map</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_manager</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_manager</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">index_map</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">_build_index_map</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -433,20 +434,21 @@
         <span class="n">values</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="n">PHENOTYPE_COLUMNS</span><span class="p">)</span>
 
         <span class="c1"># Check that the type is valid.</span>
-        <span class="k">if</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VARIABLE_TYPES</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">types</span><span class="o">.</span><span class="n">is_type_name</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unknown variable type &#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                 <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span>
             <span class="p">))</span>
 
         <span class="c1"># Factor variables need a code_name.</span>
-        <span class="k">if</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;factor&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Factor</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;code_name&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Factor variables need a &#39;code_name&#39;.&quot;</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
             <span class="s2">&quot;INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)&quot;</span><span class="p">,</span>
             <span class="nb">tuple</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="CohortManager.add_dummy_phenotype"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.add_dummy_phenotype">[docs]</a>    <span class="k">def</span> <span class="nf">add_dummy_phenotype</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Insert a dummy phenotype into the database.</span>
@@ -528,7 +530,7 @@
                 <span class="k">if</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="ow">is</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span> <span class="ow">or</span> <span class="n">val</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">):</span>
                     <span class="k">continue</span>
 
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_valid_date</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">types</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">predicate</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">bad_date_message</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="n">field</span><span class="p">))</span>
 
         <span class="k">try</span><span class="p">:</span>
@@ -592,8 +594,8 @@
 <div class="viewcode-block" id="CohortManager.set_samples"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.set_samples">[docs]</a>    <span class="k">def</span> <span class="nf">set_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">samples</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Set the sample IDs and order.</span>
 
-<span class="sd">        This can take either an ndarray of dtype np.string_ or a regular Python</span>
-<span class="sd">        array of str.</span>
+<span class="sd">        This can take either an ndarray of dtype `np.string_` or a regular</span>
+<span class="sd">        Python array of str.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="ow">is</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -615,20 +617,19 @@
         <span class="sd">&quot;&quot;&quot;Add a data vector to the cohort.&quot;&quot;&quot;</span>
         <span class="c1"># Check if phenotype is in database (metadata needs to be there before</span>
         <span class="c1"># the user binds data).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-            <span class="s2">&quot;SELECT name, variable_type, code_name &quot;</span>
-            <span class="s2">&quot;FROM phenotypes WHERE name=?&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">tu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">tu</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="k">if</span> <span class="n">meta</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not find metadata for &#39;{}&#39;. Add the phenotype before &quot;</span>
                 <span class="s2">&quot;binding data.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
             <span class="p">)</span>
-        <span class="k">assert</span> <span class="n">tu</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">phenotype</span>
-        <span class="n">variable_type</span> <span class="o">=</span> <span class="n">tu</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">code_name</span> <span class="o">=</span> <span class="n">tu</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+        <span class="n">variable_type</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span>
+        <span class="n">code_name</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;code_name&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;frozen&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;yes&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">UnknownSamplesError</span><span class="p">()</span>
@@ -640,117 +641,36 @@
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">phenotype</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data for &#39;{}&#39; is already &quot;</span>
-                             <span class="s2">&quot;in the database.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data for &#39;{}&#39; is already in the database.&quot;</span>
+                             <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">))</span>
 
-        <span class="c1"># Type check.</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">variable_type</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
-            <span class="c1"># We are expecting only 0, 1 and NA.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_discrete</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">)</span>
+        <span class="c1"># Because checking for factor variables is a bit different, we do</span>
+        <span class="c1"># additional checks.</span>
+        <span class="c1"># Otherwise, we just pass the data to the relevant</span>
+        <span class="c1"># check method as defined in the types module.</span>
+        <span class="k">if</span> <span class="n">variable_type</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Factor</span><span class="p">):</span>
+            <span class="c1"># Get the factor mapping.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="s2">&quot;SELECT key, value FROM code WHERE name=?&quot;</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">code_name</span><span class="p">,</span> <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
 
-        <span class="k">elif</span> <span class="n">variable_type</span> <span class="o">==</span> <span class="s2">&quot;factor&quot;</span><span class="p">:</span>
-            <span class="c1"># Make sure the matadata code is consistent with the observed</span>
-            <span class="c1"># values.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_factor</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">code_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">mapping</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">CohortDataError</span><span class="p">(</span><span class="s2">&quot;Could not find the code for factor &quot;</span>
+                                      <span class="s2">&quot;variable &#39;{}&#39;. The code name is &quot;</span>
+                                      <span class="s2">&quot;&#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">code_name</span><span class="p">))</span>
 
-        <span class="k">elif</span> <span class="n">variable_type</span> <span class="o">==</span> <span class="s2">&quot;continuous&quot;</span><span class="p">:</span>
-            <span class="c1"># If there is less than 5 distinct values, warn the user and</span>
-            <span class="c1"># suggest using a different variable type.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_continuous</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">)</span>
+            <span class="n">_type_check</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">variable_type</span><span class="p">,</span> <span class="n">mapping</span><span class="p">)</span>
 
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unknown variable type &#39;{}&#39;. Use &#39;discrete&#39;, &quot;</span>
-                             <span class="s2">&quot;&#39;factor&#39; or &#39;continuous&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">variable_type</span><span class="p">))</span>
+            <span class="n">_type_check</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">variable_type</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">values</span><span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">_check_data_discrete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Check that the data vector is consistent with a discrete variable.</span>
-
-<span class="sd">        This is done by making sure that only 0, 1 and NAs are in the vector.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">extra</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)])</span> <span class="o">-</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">}</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">extra</span><span class="p">)[:</span><span class="mi">5</span><span class="p">]])</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">:</span>
-                <span class="n">extra</span> <span class="o">+=</span> <span class="s2">&quot;, ...&quot;</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Authorized values for discrete variables are 0, 1 and np.nan.&quot;</span>
-                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Unexpected values were observed for &#39;{}&#39; ({}).&quot;</span>
-                <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">extra</span><span class="p">)</span>
-            <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_check_data_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">code_name</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Check that the data vector is consistent with a factor variable.</span>
-
-<span class="sd">        This is done by looking at the code from the database and making sure</span>
-<span class="sd">        that all the observed integer codes are defined.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Get the code.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-            <span class="s2">&quot;SELECT key, value FROM code WHERE name=?&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="n">code_name</span><span class="p">,</span> <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">mapping</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">CohortDataError</span><span class="p">(</span><span class="s2">&quot;Could not find the code for factor &quot;</span>
-                                  <span class="s2">&quot;variable &#39;{}&#39;. The code name is &quot;</span>
-                                  <span class="s2">&quot;&#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">code_name</span><span class="p">))</span>
-
-        <span class="c1"># Check if the set of observed values is consistent with the code.</span>
-        <span class="n">observed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)])</span>
-        <span class="n">expected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mapping</span><span class="p">])</span>
-        <span class="n">extra</span> <span class="o">=</span> <span class="n">observed</span> <span class="o">-</span> <span class="n">expected</span>
-        <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">CohortDataError</span><span class="p">(</span><span class="s2">&quot;Unknown encoding value(s) ({}) for factor &quot;</span>
-                                  <span class="s2">&quot;variables &#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">extra</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">_check_data_continuous</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">_raise</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Check that the data vector is continuous.</span>
-
-<span class="sd">        This is very hard to check.</span>
-
-<span class="sd">        After taking the outlier data points (arbitrarily defined as):</span>
-
-<span class="sd">            |x| &gt; 3 * median absolute deviation + median</span>
-
-<span class="sd">        We take the most common outlier if it consists of at least 50% of the</span>
-<span class="sd">        identified data points. If such a value exist, we suggest to the</span>
-<span class="sd">        user that it might be a weird value arising from bad missing variable</span>
-<span class="sd">        coding.</span>
-
-<span class="sd">        Also, if there is less than 5 distinct values in either the full vector</span>
-<span class="sd">        or a random sample of 5000 elements, a warning will be displayed</span>
-<span class="sd">        prompting the user to verify the data type.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">values</span><span class="p">)]</span>
-
-        <span class="c1"># Factor check.</span>
-        <span class="n">n_values</span> <span class="o">=</span> <span class="n">inference</span><span class="o">.</span><span class="n">estimate_num_distinct</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">n_values</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;The phenotype &#39;{}&#39; is marked as continuous, but &quot;</span>
-                       <span class="s2">&quot;it has a lot of redundancy. Perhaps it should be &quot;</span>
-                       <span class="s2">&quot;modeled as a factor or another variable type.&quot;</span>
-                       <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">_raise</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>  <span class="c1"># pragma: no cover</span>
-
-        <span class="c1"># Outlier check.</span>
-        <span class="n">common_outlier</span> <span class="o">=</span> <span class="n">inference</span><span class="o">.</span><span class="n">find_overrepresented_outlier</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">common_outlier</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;The value &#39;{}&#39; is commonly found in the tails of the &quot;</span>
-                       <span class="s2">&quot;distribution for &#39;{}&#39;. This could be because of bad &quot;</span>
-                       <span class="s2">&quot;coding of missing values.&quot;</span>
-                       <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">common_outlier</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">_raise</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>  <span class="c1"># pragma: no cover</span>
+        <span class="c1"># If no exception was raised, store the data.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span>
+            <span class="n">phenotype</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">variable_type</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="c1"># Get information.</span>
 <div class="viewcode-block" id="CohortManager.get_samples"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.get_samples">[docs]</a>    <span class="k">def</span> <span class="nf">get_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -825,7 +745,7 @@
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">):</span>
                     <span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="ow">not</span> <span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">_is_valid_date</span><span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">])):</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">types</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">predicate</span><span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">])):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid date &#39;{}&#39; (not ISO 8601).&quot;</span>
                                      <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dates</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
 
@@ -990,11 +910,12 @@
         <span class="n">states</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">meta</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">((</span><span class="n">meta1</span><span class="p">,</span> <span class="n">meta2</span><span class="p">)):</span>
-            <span class="k">if</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
                 <span class="n">dims</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># NaN, 0, 1</span>
                 <span class="n">states</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
                 <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="s2">&quot;missing&quot;</span><span class="p">,</span> <span class="s2">&quot;control&quot;</span><span class="p">,</span> <span class="s2">&quot;case&quot;</span><span class="p">])</span>
-            <span class="k">elif</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;factor&quot;</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Factor</span><span class="p">):</span>
                 <span class="n">code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_code</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;code_name&quot;</span><span class="p">])</span>
 
                 <span class="n">dims</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
@@ -1014,8 +935,14 @@
                 <span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="p">)])</span>
 
-        <span class="n">v1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype1</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">False</span><span class="p">))</span>
-        <span class="n">v2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype2</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">False</span><span class="p">))</span>
+        <span class="n">v1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_raw_data</span><span class="p">(</span>
+            <span class="n">phenotype1</span><span class="p">,</span>
+            <span class="n">cm_type</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">meta1</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span>
+        <span class="p">))</span>
+        <span class="n">v2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_raw_data</span><span class="p">(</span>
+            <span class="n">phenotype2</span><span class="p">,</span>
+            <span class="n">cm_type</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">meta2</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span>
+        <span class="p">))</span>
 
         <span class="n">counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
         <span class="n">counts</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">v2</span><span class="p">))</span>
@@ -1072,30 +999,66 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT key, value FROM code WHERE name=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">))</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="CohortManager.get_data"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.get_data">[docs]</a>    <span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Get a phenotype vector.</span>
+    <span class="k">def</span> <span class="nf">_get_raw_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">cm_type</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get the non-processed data.</span>
 
-<span class="sd">        By default, this will be the HDF5 dataset because it&#39;s the most</span>
-<span class="sd">        efficient representation.</span>
-
-<span class="sd">        If you need the numpy functionalities, use `numpy=True`.</span>
+<span class="sd">        The only data manipulation is the type-level decode (which, by</span>
+<span class="sd">        default, converts the dataset to a numpy array).</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data/&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)]</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data/{}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)]</span>
+            <span class="k">return</span> <span class="n">cm_type</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;No data for &#39;{}&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">))</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">numpy</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">data</span>
-
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<div class="viewcode-block" id="CohortManager.get_data"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.get_data">[docs]</a>    <span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get a phenotype vector as a numpy array.&quot;&quot;&quot;</span>
         <span class="c1"># Get metadata.</span>
         <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;continuous&quot;</span><span class="p">,</span> <span class="s2">&quot;discrete&quot;</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_represent_factor_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">meta</span><span class="p">)</span></div>
+        <span class="c1"># Make sure the type is valid.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">types</span><span class="o">.</span><span class="n">is_type_name</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">CohortDataError</span><span class="p">(</span>
+                <span class="s2">&quot;Data for variable &#39;{}&#39; was stored, but it is of an unknown &quot;</span>
+                <span class="s2">&quot;type: {}.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Discrete phenotypes are explicitly recoded to account for unaffected</span>
+        <span class="c1"># parents.</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_discrete_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_raw_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">cm_type</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+
+        <span class="c1"># Factor variables are returned as pandas series.</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Factor</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_represent_factor_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">meta</span><span class="p">)</span>
+
+        <span class="c1"># Any other variable types are returned as is.</span>
+        <span class="k">return</span> <span class="n">data</span></div>
+
+    <span class="k">def</span> <span class="nf">_check_unaffected_parent_variables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
+        <span class="n">unaffected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="bp">False</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">cur</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)[</span><span class="s2">&quot;parent&quot;</span><span class="p">]</span>
+
+        <span class="k">while</span> <span class="n">cur</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">cur</span><span class="p">)</span>
+            <span class="n">_type</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">_type</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_raw_data</span><span class="p">(</span><span class="n">cur</span><span class="p">,</span> <span class="n">cm_type</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">)</span>
+                <span class="n">unaffected</span><span class="p">[</span><span class="n">data</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+
+            <span class="n">cur</span> <span class="o">=</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;parent&quot;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">unaffected</span>
+
+    <span class="k">def</span> <span class="nf">_get_discrete_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
+        <span class="n">unaffected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_unaffected_parent_variables</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_raw_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">cm_type</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">)</span>
+        <span class="n">data</span><span class="p">[</span><span class="n">unaffected</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">data</span>
 
     <span class="k">def</span> <span class="nf">_represent_factor_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">meta</span><span class="p">):</span>
         <span class="c1"># Get the code.</span>
@@ -1129,7 +1092,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="nb">set</span><span class="p">([</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()])</span></div>
 
-<div class="viewcode-block" id="CohortManager.delete"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
+<div class="viewcode-block" id="CohortManager.delete"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">,</span> <span class="n">_db_only</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Remove a phenotype from the manager.&quot;&quot;&quot;</span>
         <span class="c1"># Checking the phenotype is valid</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_valid_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">):</span>
@@ -1151,7 +1114,7 @@
             <span class="p">)</span>
 
         <span class="c1"># Deleting the data if the phenotype is not a dummy one</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_dummy</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_dummy</span> <span class="ow">or</span> <span class="n">_db_only</span><span class="p">):</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data/{}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)]</span>
 
         <span class="c1"># Committing</span>
@@ -1194,12 +1157,13 @@
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">phenotype</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">phenotypes</span><span class="p">):</span>
             <span class="c1"># Get phenotype information.</span>
             <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Can&#39;t merge non-discrete variable ({}) into &quot;</span>
                                  <span class="s2">&quot;factor.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">))</span>
 
             <span class="c1"># Add the data.</span>
-            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span> <span class="o">==</span> <span class="mf">1.0</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span> <span class="o">==</span> <span class="mf">1.0</span>
             <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">filled</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Some discrete variables in the provided set are not &quot;</span>
@@ -1247,8 +1211,7 @@
             <span class="k">def</span> <span class="nf">_print</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="n">CohortDataError</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">check_phenotypes_have_data</span><span class="p">(</span><span class="n">_print</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">hierarchical_reclassify</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_phenotypes_have_data</span><span class="p">(</span><span class="n">_print</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="CohortManager.check_phenotypes_have_data"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.check_phenotypes_have_data">[docs]</a>    <span class="k">def</span> <span class="nf">check_phenotypes_have_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">printer</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Check that all the phenotypes in the database have data entries.&quot;&quot;&quot;</span>
@@ -1267,104 +1230,34 @@
                      <span class="s2">&quot;binary data store.&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">True</span></div>
 
-<div class="viewcode-block" id="CohortManager.hierarchical_reclassify"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.hierarchical_reclassify">[docs]</a>    <span class="k">def</span> <span class="nf">hierarchical_reclassify</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Reclassify controls according to the PhenotypeTree.</span>
-
-<span class="sd">        Let u, v be discrete phenotypes, where u is the parent of v.</span>
-<span class="sd">        if patient i in unaffected for u, he should be unaffected for v.</span>
-<span class="sd">        This function adjusts the data container to reflect this constraint.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Reclassifying case/control data with respect to the &quot;</span>
-                    <span class="s2">&quot;hierarchical structure in the phenotype description.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Commit the manager to generate the hierarchical &quot;</span>
-                            <span class="s2">&quot;phenotype representation.&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Use a depth first traversal to reclassify controls.</span>
-        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="o">.</span><span class="n">depth_first_traversal</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-            <span class="c1"># Check if child and parent are discrete.</span>
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">variable_type</span> <span class="o">!=</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">variable_type</span> <span class="o">!=</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-            <span class="n">missing</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-
-            <span class="n">parent_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-            <span class="n">parent_control</span> <span class="o">=</span> <span class="n">parent_data</span> <span class="o">==</span> <span class="mi">0</span>
-
-            <span class="c1"># Reclassification.</span>
-            <span class="n">data</span><span class="p">[</span><span class="n">missing</span> <span class="o">&amp;</span> <span class="n">parent_control</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
-
-            <span class="c1"># Write to HDF5</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data/&quot;</span> <span class="o">+</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">name</span><span class="p">][</span><span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span></div>
-
-<div class="viewcode-block" id="CohortManager.get_number_unaffected"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.get_number_unaffected">[docs]</a>    <span class="k">def</span> <span class="nf">get_number_unaffected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Robust function to get the number of unaffected samples for a given</span>
-<span class="sd">        phenotype.</span>
-
-<span class="sd">        If the parent of a variable is unaffected (only valid for discrete</span>
-<span class="sd">        variables), then it is unaffected, even though it will be marked as</span>
-<span class="sd">        NA in the HDF5 container.</span>
-
-<span class="sd">        .. warning::</span>
-<span class="sd">            This does not take into account arbitrary factor values to identify</span>
-<span class="sd">            unaffected individuals.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Find the node from it&#39;s root.</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="bp">False</span>
-        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="o">.</span><span class="n">depth_first_traversal</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">phenotype</span><span class="p">:</span>
-                <span class="n">found</span> <span class="o">=</span> <span class="bp">True</span>
-                <span class="k">break</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Phenotype &#39;{}&#39; is not in database.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
-            <span class="p">)</span>
-
-        <span class="c1"># Walk back from the node to the root.</span>
-        <span class="n">cur</span> <span class="o">=</span> <span class="n">node</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">([</span><span class="n">cur</span><span class="p">])</span>
-        <span class="k">while</span> <span class="n">cur</span><span class="o">.</span><span class="n">parent</span><span class="p">:</span>
-            <span class="n">path</span><span class="o">.</span><span class="n">appendleft</span><span class="p">(</span><span class="n">cur</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
-            <span class="n">cur</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">parent</span>
-
-        <span class="c1"># Walk the path to find all the unaffected individuals as marked in the</span>
-        <span class="c1"># hierarchy.</span>
-        <span class="n">unaffected</span> <span class="o">=</span> <span class="bp">None</span>
-        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">variable_type</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
-                <span class="c1"># Get the data vector.</span>
-                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">unaffected</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-                    <span class="n">unaffected</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">unaffected</span> <span class="o">|=</span> <span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">unaffected</span><span class="p">)</span> <span class="k">if</span> <span class="n">unaffected</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="mi">0</span></div>
-
 <div class="viewcode-block" id="CohortManager.get_number_missing"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.get_number_missing">[docs]</a>    <span class="k">def</span> <span class="nf">get_number_missing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phenotype</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get the true number of missing data points.&quot;&quot;&quot;</span>
-        <span class="n">n_unaffected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_number_unaffected</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
         <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span><span class="p">:</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span>
+
+        <span class="c1"># For discrete data, unaffected individuals are automatically</span>
+        <span class="c1"># reclassified.</span>
+        <span class="k">if</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
-        <span class="k">elif</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;factor&quot;</span><span class="p">:</span>
+
+        <span class="n">n_unaffected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check_unaffected_parent_variables</span><span class="p">(</span><span class="n">phenotype</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Dates and Factors are returned as pandas series.</span>
+        <span class="n">encoded_as_series</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Factor</span><span class="p">)</span> <span class="ow">or</span>
+            <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Date</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">encoded_as_series</span><span class="p">:</span>
             <span class="n">nans</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">isnull</span><span class="p">())</span>
             <span class="k">return</span> <span class="n">nans</span> <span class="o">-</span> <span class="n">n_unaffected</span>
-        <span class="k">elif</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;continuous&quot;</span><span class="p">:</span>
-            <span class="n">nans</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
-            <span class="k">return</span> <span class="n">nans</span> <span class="o">-</span> <span class="n">n_unaffected</span></div>
+
+        <span class="c1"># Generic case.</span>
+        <span class="n">nans</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">nans</span> <span class="o">-</span> <span class="n">n_unaffected</span></div>
 
 <div class="viewcode-block" id="CohortManager.variable"><a class="viewcode-back" href="../../api.html#cohort_manager.core.CohortManager.variable">[docs]</a>    <span class="k">def</span> <span class="nf">variable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Returns a variable object usable to create virtual phenotypes.</span>
@@ -1379,9 +1272,11 @@
 <span class="sd">        &gt;&gt;&gt; obese = (v(&quot;mass&quot;) / (v(&quot;height&quot;) ** 2)) &gt; 30</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_phenotype</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;continuous&quot;</span><span class="p">,</span> <span class="s2">&quot;discrete&quot;</span><span class="p">):</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">type_str</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;variable_type&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Continuous</span><span class="p">)</span> <span class="ow">or</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">subtype_of</span><span class="p">(</span><span class="n">types</span><span class="o">.</span><span class="n">Discrete</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;The virtual variable system can only be used &quot;</span>
                             <span class="s2">&quot;with continuous and discrete variables.&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">_Variable</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
@@ -1700,12 +1595,17 @@
     <span class="k">return</span> <span class="n">out</span></div>
 
 
-<span class="k">def</span> <span class="nf">_is_valid_date</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_type_check</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">_type</span><span class="p">,</span> <span class="o">*</span><span class="n">check_args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Wraps type checks to provide better logging.&quot;&quot;&quot;</span>
+    <span class="n">exception</span> <span class="o">=</span> <span class="bp">None</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">True</span>
-    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">False</span>
+        <span class="n">_type</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="o">*</span><span class="n">check_args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">types</span><span class="o">.</span><span class="n">InvalidValues</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">exception</span> <span class="o">=</span> <span class="n">e</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Variable &#39;{}&#39; failed data type validation checks and &quot;</span>
+                       <span class="s2">&quot;cannot be inserted.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">exception</span>
 </pre></div>
 
            </div>

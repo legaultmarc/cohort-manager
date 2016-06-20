@@ -1,0 +1,255 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Type system &mdash; CohortManager 0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="CohortManager 0.1 documentation" href="index.html"/>
+        <link rel="next" title="Importing data" href="importing.html"/>
+        <link rel="prev" title="The core API" href="api.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CohortManager
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="api.html">The core API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Type system</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-types-type-class">The types.Type class</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="importing.html">Importing data</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="index.html">CohortManager</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+ 
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+      
+    <li>Type system</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/type_system.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="type-system">
+<h1>Type system<a class="headerlink" href="#type-system" title="Permalink to this headline">¶</a></h1>
+<p>An important feature of this project is the unified representation of variables
+across data type. This is accomplished using a hierarchical type system where
+every data type defines its own validation function.</p>
+<div class="figure align-center" id="id1">
+<a class="reference internal image-reference" href="_images/types_graph.png"><img alt="Type hierarchy as a tree." src="_images/types_graph.png" style="width: 60%;" /></a>
+<p class="caption"><span class="caption-text">Tree representing the relationship between data types. Most of the time,
+all the validation checks of the parent types are applied when checking a
+subtype.</span></p>
+</div>
+<div class="section" id="the-types-type-class">
+<h2>The types.Type class<a class="headerlink" href="#the-types-type-class" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="cohort_manager.types.Type">
+<em class="property">class </em><code class="descclassname">cohort_manager.types.</code><code class="descname">Type</code><a class="reference internal" href="_modules/cohort_manager/types.html#Type"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.types.Type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parent type for all types.</p>
+<dl class="staticmethod">
+<dt id="cohort_manager.types.Type.check">
+<em class="property">static </em><code class="descname">check</code><span class="sig-paren">(</span><em>values</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/types.html#Type.check"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.types.Type.check" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if a data vector is of the appropriate type.</p>
+<p>Raises an InvalidValues exception as a way of conveniently passing the
+error message if relevant.</p>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="cohort_manager.types.Type.decode">
+<em class="property">static </em><code class="descname">decode</code><span class="sig-paren">(</span><em>hdf5_dataset</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/types.html#Type.decode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.types.Type.decode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method that is used to restore data from HDF5.</p>
+<p>If a special encoding method was provided, implementing this method
+is essential.</p>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="cohort_manager.types.Type.encode">
+<em class="property">static </em><code class="descname">encode</code><span class="sig-paren">(</span><em>values</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cohort_manager/types.html#Type.encode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cohort_manager.types.Type.encode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method that gets called when storing the data in the HDF5 dataset.</p>
+<p>This can be overriden by children who need a special encoding step.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This function gets called automatically and can be used to encode
+arrays that are not handled correctly by H5PY. It should not be
+used to process information.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="importing.html" class="btn btn-neutral float-right" title="Importing data" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="api.html" class="btn btn-neutral" title="The core API" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2016, Marc-André Legault.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

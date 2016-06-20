@@ -35,9 +35,15 @@ with ChEMBL.
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
-   api.rst
+    api.rst
+
+    type_system.rst
+
+    importing.rst
+
+    hierarchy.rst
 
 
 Indices and tables

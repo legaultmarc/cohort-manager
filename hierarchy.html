@@ -1,0 +1,263 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Hierarchy between variables &mdash; CohortManager 0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="CohortManager 0.1 documentation" href="index.html"/>
+        <link rel="prev" title="Importing data" href="importing.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CohortManager
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="api.html">The core API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="type_system.html">Type system</a></li>
+<li class="toctree-l1"><a class="reference internal" href="importing.html">Importing data</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Hierarchy between variables</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#impact-on-variable-coding">Impact on variable coding</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="index.html">CohortManager</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+ 
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+      
+    <li>Hierarchy between variables</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/hierarchy.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="hierarchy-between-variables">
+<h1>Hierarchy between variables<a class="headerlink" href="#hierarchy-between-variables" title="Permalink to this headline">¶</a></h1>
+<p>Collections of phenotypes often exhibit a hierarchical structure. This
+structure can be explicitly represented in the case report form (CRF) that was
+used for data collection, or it could arise because of the clinical definition
+of diseases. Structured vocabularies, like the International Classification of
+Diseases, define terms of increasing specificity as one moves away from the
+broader terms.</p>
+<div class="section" id="impact-on-variable-coding">
+<h2>Impact on variable coding<a class="headerlink" href="#impact-on-variable-coding" title="Permalink to this headline">¶</a></h2>
+<p>In CohortManager, the hierarchy is used when encoding variables for analysis or
+when computing summary statistics.</p>
+<div class="admonition important">
+<p class="first admonition-title">Important</p>
+<p>When data is accessed any individual marked unaffected for a parent
+variable will be set to:</p>
+<blockquote class="last">
+<div><ul class="simple">
+<li>0 if the variable is discrete</li>
+<li>NaN otherwise</li>
+</ul>
+</div></blockquote>
+</div>
+<p>The rationale behind this is that individuals that are unaffected for a parent
+are unaffected for all the children. Hence, any continuous or factor variable
+should not be defined for this individual. This is very practical to
+represent data from case report forms that often skip questions when an
+individual is unaffected for a condition.</p>
+<p>Here is a concrete example of how variable coding works in CohortManager.
+First, consider the following excerpt from a CRF:</p>
+<div class="code highlight-default"><div class="highlight"><pre><span></span>1. Do you have a history of arrhythmia? (Yes/No)
+   - If you answered Yes to question 1, complete the following:
+        1.1 Do you have a history of atrial fibrillation? (Yes/No)
+            - If you answered Yes to question 1.1, complete the following:
+                + Did you suffer from paroxysmal atrial fibrillation? (Yes/No)
+                + Did you suffer from persistent atrial fibrillation? (Yes/No)
+                + Did you suffer from chronic atrial fibrillation? (Yes/No)
+        1.2 How many years ago did you suffer from atrial fibrillation?
+</pre></div>
+</div>
+<p>Given the previous CRF, some medical coding implementations will represent all
+the skipped fields as missing data. This is incorrect, because data is not
+really missing and individuals should be recognized as controls. In
+CohortManager, if the parent variable is set correctly, samples will be
+dynamically reclassified to account for this.</p>
+<div class="figure align-center">
+<a class="reference internal image-reference" href="_images/hierarchy.svg"><img alt="Example of structured variables" src="_images/hierarchy.svg" width="100%" /></a>
+</div>
+<p>There are a few things to note about this example:</p>
+<ol class="arabic simple">
+<li>The <a class="reference internal" href="api.html#cohort_manager.core.CohortManager.get_number_missing" title="cohort_manager.core.CohortManager.get_number_missing"><code class="xref py py-meth docutils literal"><span class="pre">cohort_manager.core.CohortManager.get_number_missing()</span></code></a> is aware
+of the hierarchy and will understand that missing values are not truly
+missing if an individual is unaffected for a parent discrete variable.</li>
+<li>When using <a class="reference internal" href="api.html#cohort_manager.core.CohortManager.add_data" title="cohort_manager.core.CohortManager.add_data"><code class="xref py py-meth docutils literal"><span class="pre">cohort_manager.core.CohortManager.add_data()</span></code></a>, data
+for individuals unaffected for a parent will be ignored. The data <strong>is not
+lost</strong>, but it is dynamically remapped (to 0 or to NA) when accessed.
+Removing the parent is enough to get the initial interpretation.</li>
+</ol>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="importing.html" class="btn btn-neutral" title="Importing data" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2016, Marc-André Legault.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
