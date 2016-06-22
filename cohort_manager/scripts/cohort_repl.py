@@ -410,6 +410,25 @@ def build(yaml_filename):
             "Loaded cohort {}.".format(yaml_filename)}
 
 
+@command(args_types=(str, ))
+def dummy(name):
+    """Create a new dummy phenotype with the given name.
+
+    :param name: The name of the new dummy phenotype.
+    :type name: str
+
+    Dummy phenotypes can be used to organize variables within the manager.
+
+    """
+    manager = _get_manager()
+    manager.add_dummy_phenotype(name)
+
+    return {
+        "success": True,
+        "message": "Created a new dummy phenotype '{}'.".format(name)
+    }
+
+
 @command(args_types=(str, str))
 def rename(old_name, new_name):
     """Rename a phenotype.

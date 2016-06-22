@@ -274,7 +274,7 @@ class CohortManager(object):
 
     def rebuild_tree(self):
         """Rebuild the phenotype tree."""
-        self.tree = tree_from_database(self.cur)
+        self.tree = tree_from_database(self.con)
 
     def commit(self):
         """Commit the database and rebuilt the phenotype tree."""
@@ -337,6 +337,8 @@ class CohortManager(object):
             "INSERT INTO dummy_phenotypes (name) VALUES (?)",
             (name, ),
         )
+
+        self.commit()
 
     def register_drug_user(self, drug_id, sample, **kwargs):
         """Register that 'sample' is a user of drug 'drug_id'.
@@ -913,7 +915,12 @@ class CohortManager(object):
 
         while cur is not None:
             meta = self.get_phenotype(cur)
-            _type = types.type_str(meta["variable_type"])
+            if meta["variable_type"] == "dummy":
+                # We set this because Type is not a sub-type of discrete.
+                _type = types.Type
+            else:
+                _type = types.type_str(meta["variable_type"])
+
             if _type.subtype_of(types.Discrete):
                 data = self._get_raw_data(cur, cm_type=types.Discrete)
                 unaffected[data == 0] = True

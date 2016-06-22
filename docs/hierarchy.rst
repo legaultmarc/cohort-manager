@@ -62,3 +62,40 @@ There are a few things to note about this example:
    for individuals unaffected for a parent will be ignored. The data **is not
    lost**, but it is dynamically remapped (to 0 or to NA) when accessed.
    Removing the parent is enough to get the initial interpretation.
+
+Censoring
+----------
+
+It might seem intuitive to make time to event (continuous) variables children
+of their associated (discrete) event variable. Because of the classification
+discussed above, this will lead to errors! The time to event of censored
+samples will be erroneously set to NA.
+
+.. warning::
+
+    Do not set the ``event`` variable as the ``time to event`` variable's
+    parent.
+
+To work around this, dummy variables can be used to organize such data. As an
+example, given the ``event`` and ``time_to_event`` variables, the following
+commands could be used:
+
+.. code::
+
+    [cohort repl]> dummy event_group
+    [cohort repl]> update event
+    (json)>>> {"parent": "event_group"}
+    [cohort repl]> update time_to_event
+    (json)>>> {"parent": "event_group"}
+
+This will result in the following result when running the ``list`` command.
+
+.. code::
+
+    [cohort repl]> list
+    event_group*
+         - event
+         - time_to_event
+
+The star denotes that ``event_group`` does not contain information, it is a
+`dummy variable` (not to be confused with the statistical term).

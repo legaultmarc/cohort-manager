@@ -23,7 +23,10 @@ PHENOTYPE_COLUMNS = ("name", "icd10", "parent", "variable_type", "crf_page",
                      "description", "code_name")
 
 
-NodeData = collections.namedtuple("NodeData", PHENOTYPE_COLUMNS)
+class NodeData(object):
+    def __init__(self, *cols):
+        for k, v in zip(PHENOTYPE_COLUMNS, cols):
+            self.__setattr__(k, v)
 
 
 class Node(object):
@@ -70,13 +73,16 @@ class PhenotypeTree(object):
     def _pretty_print_subtree(self, node, string, depth=0):
         """Print a node and it's children."""
         bullets = ["+", "-"]
+        name = node.data.name
+        if node.data.dummy:
+            name += "*"
+
         if depth > 0:
             print(
-                "\t" * depth, bullets[depth % len(bullets)], node.data.name,
-                file=string
+                "\t" * depth, bullets[depth % len(bullets)], name, file=string
             )
         else:
-            print(node.data.name, file=string)
+            print(name, file=string)
 
         for child in node.children:
             self._pretty_print_subtree(child, string, depth=depth + 1)
@@ -102,8 +108,18 @@ class PhenotypeTree(object):
         return leaves
 
 
-def tree_from_database(cur):
+def tree_from_database(con):
     """Build a phenotype tree from a cohort manager SQL database."""
+
+    dummy_cur = con.cursor()
+
+    def _is_dummy(name):
+        dummy_cur.execute(
+            "SELECT name FROM dummy_phenotypes WHERE name=?;", (name,)
+        )
+        return dummy_cur.fetchone() is not None
+
+    cur = con.cursor()
     cur.execute("SELECT * FROM phenotypes")
     roots = set()
     nodes = {}
@@ -111,6 +127,8 @@ def tree_from_database(cur):
     for tu in cur:
         node = Node()
         node.data = NodeData(*tu)
+        node.data.dummy = _is_dummy(node.data.name)
+
         if node.data.parent:
             links.append((node.data.name, node.data.parent))
         else:
