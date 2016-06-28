@@ -996,6 +996,7 @@ class CohortManager(object):
         self.commit()
 
     def rename(self, old_name, new_name):
+        """Rename a variable."""
         self.get_phenotype(old_name)  # Will raise KeyError if need be.
         new_name_is_free = False
         try:
@@ -1017,6 +1018,35 @@ class CohortManager(object):
         del self.data[old_name]
 
         self.commit()
+
+    def export(self, filename, variables=None):
+        """Export a list of variables to CSV.
+
+        .. note::
+
+            This should not be used to create datasets that do not fit in
+            memory.
+
+        The "trick" to create large dumps of data is to use export on subsets
+        of variables and to use the `paste` command to merge the chunks.
+
+        """
+        if variables is None:
+            variables = self.get_phenotypes_list()
+
+        df = pd.DataFrame(index=self.get_samples())
+        for var in variables:
+            df[var] = self.get_data(var)
+
+            _t = types.type_str(self.get_phenotype(var)["variable_type"])
+
+            # Integers are converted to "objects" so that they are not
+            # printed as floats in the CSV file.
+            if _t.subtype_of(types.Integer) or _t.subtype_of(types.Discrete):
+                df[var] = df[var].fillna(0).astype(int).astype(object)
+                df.loc[df[var].isnull(), var] = ""
+
+        df.to_csv(filename, index_label="sample_id")
 
     def merge_as_factor(self, new_name, phenotypes, delete=False):
         """Merge discrete phenotypes into a single factor variable.

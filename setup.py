@@ -62,6 +62,7 @@ def setup_package():
                 "cohort-repl=cohort_manager.scripts.cohort_repl:entry_point",
                 "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args",
                 "cohort-import=cohort_manager.scripts.cohort_import:parse_args",
+                "cohort-sim=cohort_manager.scripts.cohort_sim:parse_args",
             ],
         },
         classifiers=["Development Status :: 4 - Beta",

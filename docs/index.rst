@@ -39,11 +39,19 @@ Contents:
 
     api.rst
 
+    pharmacotherapy.rst
+
     type_system.rst
+
+    virtual_variables.rst
 
     importing.rst
 
+    exporting.rst
+
     hierarchy.rst
+
+    statistical_testing.rst
 
 
 Indices and tables

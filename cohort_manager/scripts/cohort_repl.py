@@ -594,6 +594,38 @@ def merge(new_name, phenotypes):
     }
 
 
+@command(args_types=(str, str), optional=1)
+def export(filename, variables=None):
+    """Export the data from the CohortManager to a CSV file.
+
+    :param filename: The output filename.
+    :type filename: str
+
+    :param variables: A comma separated list of variables to export.
+    :type variables: str
+
+    Be careful when using this function as it will load all the data to export
+    in memory. It is best to use it on subsets of data and to use 'paste'
+    command (available on UNIX systems) to combine datasets.
+
+    """
+    manager = _get_manager()
+
+    if variables is None:
+        n_variables = len(manager.get_phenotypes_list())
+    else:
+        variables = variables.split(",")
+        n_variables = len(variables)
+
+    manager.export(filename, variables)
+
+    return {
+        "success": True,
+        "message": ("Successfully exported data on {} variables for {} "
+                    "samples.".format(n_variables, manager.n))
+    }
+
+
 @command(args_types=(str, ), printer=ImagePrinter)
 def boxplot(phenotype):
     """Draw a boxplot for the given continuous phenotype.

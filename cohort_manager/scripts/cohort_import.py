@@ -92,7 +92,6 @@ def create_skeleton_from_file(filename, delimiter, encoding, known_missings):
 
                 import_flag = bool(type_name and type_name != "text")
 
-                # TODO parse this from the file if required by the user.
                 description = icd10 = ""
 
                 dataset.append((n, col, "", type_name, affected, unaffected,
@@ -187,6 +186,18 @@ def parse_args():
         default=["NA"]
     )
 
+    group.add_argument(
+        "--icd10-column",
+        help="The name of the column containing ICD10 codes.",
+        default=None
+    )
+
+    group.add_argument(
+        "--description-column",
+        help="The name of the column containing variable descriptions.",
+        default=None
+    )
+
     # Build Parser
     build_parser = subparser.add_parser(
         "build",
@@ -217,7 +228,9 @@ def parse_args():
         known_missings += args.known_missings
 
         create_skeleton_from_file(
-            args.filename, args.delimiter, args.encoding, known_missings
+            args.filename, args.delimiter, args.encoding, known_missings,
+            icd10_col=args.icd10_column,
+            description_col=args.description_column
         )
     elif args.command == "build":
         at_least_one_failed = False
