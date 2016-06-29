@@ -186,18 +186,6 @@ def parse_args():
         default=["NA"]
     )
 
-    group.add_argument(
-        "--icd10-column",
-        help="The name of the column containing ICD10 codes.",
-        default=None
-    )
-
-    group.add_argument(
-        "--description-column",
-        help="The name of the column containing variable descriptions.",
-        default=None
-    )
-
     # Build Parser
     build_parser = subparser.add_parser(
         "build",
@@ -229,8 +217,6 @@ def parse_args():
 
         create_skeleton_from_file(
             args.filename, args.delimiter, args.encoding, known_missings,
-            icd10_col=args.icd10_column,
-            description_col=args.description_column
         )
     elif args.command == "build":
         at_least_one_failed = False

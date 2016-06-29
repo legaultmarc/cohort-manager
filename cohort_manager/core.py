@@ -479,7 +479,7 @@ class CohortManager(object):
         if self["frozen"] == "yes":
             raise FrozenCohortError()
 
-        self.data.create_dataset("samples", data=samples)
+        self.data.create_dataset("samples", data=samples, compression="gzip")
         self._cache["samples"] = samples.astype(str)
         self["frozen"] = "yes"
 
@@ -539,7 +539,8 @@ class CohortManager(object):
         # If no exception was raised, store the data.
         self.data["data"].create_dataset(
             phenotype,
-            data=variable_type.encode(values)
+            data=variable_type.encode(values),
+            compression="gzip",
         )
 
     # Get information.
