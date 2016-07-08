@@ -25,15 +25,15 @@ static PyObject* align_score(PyObject *self, PyObject *args) {
     return out;
 }
 
-static PyMethodDef CDrugSearchMethods[] = {
+static PyMethodDef CStringSearchMethods[] = {
     {"align_score",
      align_score,
      METH_VARARGS,
-     "Searches for a drug name in a query using local sequence alignment.\n"
+     "Matches two strings together using local sequence alignment.\n"
      ":param query: The query string (potentially containing `word`).\n"
      ":type query: str\n\n"
-     ":param word: The name of the drug to search for. Typically this is "
-     "looped over for all possible drugs.\n"
+     ":param word: The reference str to search for. Typically this is "
+     "looped over for all possible database entries.\n"
      ":type word: str\n\n"
      ":returns: The alignment score\n"
      ":rtype: float\n"
@@ -41,22 +41,14 @@ static PyMethodDef CDrugSearchMethods[] = {
     {NULL, NULL, 0, NULL} // Sentinel
 };
 
-#if PY_MAJOR_VERSION >= 3
-static struct PyModuleDef cdrugsearchmodule = {
+static struct PyModuleDef cstringsearchmodule = {
     PyModuleDef_HEAD_INIT,
-    "c_drug_search",
+    "c_string_search",
     NULL,
     -1,
-    CDrugSearchMethods
+    CStringSearchMethods
 };
-#endif
 
-#if PY_MAJOR_VERSION >= 3
-PyMODINIT_FUNC PyInit_c_drug_search(void) {
-    return PyModule_Create(&cdrugsearchmodule);
+PyMODINIT_FUNC PyInit_c_string_search(void) {
+    return PyModule_Create(&cstringsearchmodule);
 }
-#else
-PyMODINIT_FUNC initc_drug_search(void) {
-    (void) Py_InitModule("c_drug_search", CDrugSearchMethods);
-}
-#endif

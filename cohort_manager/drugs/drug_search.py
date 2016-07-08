@@ -12,7 +12,7 @@ import logging
 
 import pandas as pd
 
-from .c_drug_search import align_score as c_align_score
+from ..c_string_search import align_score as c_align_score
 from .chembl import ChEMBL
 
 

@@ -34,12 +34,12 @@ def write_version_file(fn=None):
         a.close()
 
 
-def drug_search_extension():
+def string_search_extension():
     extension_info = {
         "sources": ["cohort_manager/src/query.cpp",
-                    "cohort_manager/src/py_drugsearch.cpp"],
+                    "cohort_manager/src/py_stringsearch.cpp"],
     }
-    return Extension("cohort_manager.drugs.c_drug_search", **extension_info)
+    return Extension("cohort_manager.c_string_search", **extension_info)
 
 
 def setup_package():
@@ -63,6 +63,7 @@ def setup_package():
                 "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args",
                 "cohort-import=cohort_manager.scripts.cohort_import:parse_args",
                 "cohort-sim=cohort_manager.scripts.cohort_sim:parse_args",
+                "cohort-snomed-ct=cohort_manager.scripts.cohort_snomed_ct:parse_args",
             ],
         },
         classifiers=["Development Status :: 4 - Beta",
@@ -72,7 +73,6 @@ def setup_package():
                      "Operating System :: MacOS :: MacOS X",
                      "Operating System :: POSIX :: Linux",
                      "Programming Language :: Python",
-                     "Programming Language :: Python :: 2.7",
                      "Programming Language :: Python :: 3",
                      "Topic :: Scientific/Engineering :: Bio-Informatics"],
         test_suite="cohort_manager.tests.test_suite",
@@ -81,7 +81,7 @@ def setup_package():
                           "six >= 1.10", "Unidecode >= 0.4.17"],
         zip_safe=False,
         ext_modules=[
-            drug_search_extension(),
+            string_search_extension(),
         ]
     )
 
