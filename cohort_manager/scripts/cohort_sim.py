@@ -9,12 +9,24 @@ import string
 
 import scipy.stats
 import numpy as np
+try:
+    import progressbar
+except ImportError:
+    pass
 
 import cohort_manager.types as types
 from cohort_manager.core import CohortManager
 
 
 def main(args):
+    try:
+        pbar = progressbar.ProgressBar(
+            widgets=[progressbar.Percentage(), progressbar.Bar()],
+            maxval=args.n_variables
+        ).start()
+    except Exception:
+        pbar = False
+
     manager = CohortManager(args.cohort)
 
     # Create the samples.
@@ -23,6 +35,11 @@ def main(args):
     # Generate the variables.
     for i in range(args.n_variables):
         _simulate_variable(manager)
+        if pbar:
+            pbar.update(i + 1)
+
+    if pbar:
+        pbar.finish()
 
 
 def _simulate_variable(manager, _type=None):
@@ -130,6 +147,7 @@ def parse_args():
     parser.add_argument(
         "-n",
         help="The number of samples (default: %(default)s).",
+        type=int,
         default=20000
     )
 
@@ -142,6 +160,7 @@ def parse_args():
     parser.add_argument(
         "--n-variables", "-m",
         help="The number of variables (default: %(default)s).",
+        type=int,
         default=1000
     )
 

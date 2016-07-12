@@ -3,6 +3,7 @@
 
 from __future__ import division
 
+import subprocess
 import operator
 import itertools
 import logging
@@ -269,7 +270,7 @@ class CohortManager(object):
     @property
     def n(self):
         if self["frozen"] == "yes":
-            return self.get_samples().shape[0]
+            return self.data["samples"].shape[0]
         return None
 
     def rebuild_tree(self):
@@ -1020,20 +1021,22 @@ class CohortManager(object):
 
         self.commit()
 
-    def export(self, filename, variables=None):
+    def export(self, filename, variables=None, index=True):
         """Export a list of variables to CSV.
 
-        .. note::
+        :param filename: The output filename.
+        :type filename: str
 
-            This should not be used to create datasets that do not fit in
-            memory.
+        :param variables: A list of variables to export (or None).
+        :type variables: list
 
-        The "trick" to create large dumps of data is to use export on subsets
-        of variables and to use the `paste` command to merge the chunks.
+        :param index: A boolean indicating if the sample IDs need to be
+                      exported as the first column of the file.
+        :type index: bool
 
         """
         if variables is None:
-            variables = self.get_phenotypes_list()
+            return self.export_all(filename)
 
         df = pd.DataFrame(index=self.get_samples())
         for var in variables:
@@ -1047,7 +1050,63 @@ class CohortManager(object):
                 df[var] = df[var].fillna(0).astype(int).astype(object)
                 df.loc[df[var].isnull(), var] = ""
 
-        df.to_csv(filename, index_label="sample_id")
+        if index:
+            df.to_csv(filename, index_label="sample_id")
+        else:
+            df.to_csv(filename, index=False)
+
+    def export_all(self, filename):
+        """Batch export of all the variables.
+
+        .. note::
+
+            This method uses the 'paste' utility available on most UNIX-based
+            systems.
+
+        """
+        blocks = []
+        cur = []
+        for i in self.get_phenotypes_list():
+            if len(cur) < 10:
+                cur.append(i)
+            else:
+                blocks.append(cur)
+                cur = [i, ]
+
+        if cur:
+            blocks.append(cur)
+
+        # Create the chunk files.
+        temp_files = []
+        for i, block in enumerate(blocks):
+            temp_filename = ".cm_export_{}.csv".format(i + 1)
+            temp_files.append(temp_filename)
+
+            index = (i == 0)
+            self.export(temp_filename, block, index=index)
+
+        # Paste them.
+        cmd = ["paste", "-d", ","]
+        cmd.extend(temp_files)
+
+        if filename[-3:] != ".gz":
+            filename += ".gz"
+
+        with open(filename, "wb") as f:
+            paste_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            gzip_proc = subprocess.Popen(
+                ["gzip", "-"],
+                stdin=paste_proc.stdout,
+                stdout=f
+            )
+            paste_proc.stdout.close()
+
+            gzip_proc.wait()
+            f.flush()
+
+        # Clean up.
+        for temp_filename in temp_files:
+            os.remove(temp_filename)
 
     def merge_as_factor(self, new_name, phenotypes, delete=False):
         """Merge discrete phenotypes into a single factor variable.
