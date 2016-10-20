@@ -40,7 +40,6 @@ try:
 except ImportError:
     COLOR = False
 
-from cohort_manager.parser import parse_yaml
 from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
 from cohort_manager.drugs.drug_search import find_drugs_in_query
@@ -394,23 +393,6 @@ def help(command=None):
 
 
 @command(args_types=(str, ))
-def build(yaml_filename):
-    """Build and load a cohort using a YAML descriptor.
-
-    :param yaml_filename: The filename of the YAML cohort descriptor.
-    :type yaml_filename: str
-
-    This command will build the cohort and load it in the current session.
-
-    """
-    STATE["manager"] = parse_yaml(yaml_filename)
-    STATE["manager"].validate()
-
-    return {"success": True, "message":
-            "Loaded cohort {}.".format(yaml_filename)}
-
-
-@command(args_types=(str, ))
 def dummy(name):
     """Create a new dummy phenotype with the given name.
 
@@ -467,6 +449,59 @@ def sql(sql):
         raise REPLException("Invalid SQL statement:\n{}".format(e))
 
     return {"success": True, "message": str(manager.cur.fetchall())}
+
+
+@command
+def summarize():
+    """Summarizes the contents of the manager."""
+    manager = _get_manager()
+    out = StringIO()
+
+    print("Summary for '{}' ('{}').\n".format(manager.name, manager.path),
+          file=out)
+
+    m = len(manager.get_phenotypes_list(dummy=False))
+    print("{:,d} samples; {:,d} variables:\n".format(manager.n, m), file=out,
+          end="")
+
+    print(
+        "+===============+===========+\n"
+        "| Variable type |   Count   |\n"
+        "+---------------+-----------+",
+        file=out
+    )
+
+    manager.cur.execute(
+        "SELECT count(*), variable_type "
+        "FROM phenotypes p LEFT OUTER JOIN "
+        "  dummy_phenotypes d "
+        "  on p.name=d.name "
+        "WHERE d.name IS NULL "
+        "GROUP BY p.variable_type"
+    )
+    for count, t in manager.cur:
+        print("| {:<13} | {:>9} |".format(t, count), file=out)
+    print("+---------------+-----------+\n", file=out)
+
+    counts = {}
+    counts["entries"] = manager.cur.execute(
+        "SELECT count(*) FROM drug_users;"
+    ).fetchone()[0]
+
+    counts["drugs"] = manager.cur.execute(
+        "SELECT count(DISTINCT drug_id) FROM drug_users;"
+    ).fetchone()[0]
+
+    counts["samples"] = manager.cur.execute(
+        "SELECT count(DISTINCT sample_id) FROM drug_users;"
+    ).fetchone()[0]
+
+    print(
+        "Drug data contains {entries:,d} entries on {drugs:,d} drugs for "
+        "{samples:,d} samples.".format(**counts), file=out
+    )
+
+    return {"success": True, "message": out.getvalue()}
 
 
 @command

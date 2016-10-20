@@ -95,6 +95,9 @@ def infer_type(li, max_size=5000, known_missings=None):
     if type_counts[0][0] == "past_year":
         return "year"
 
+    if type_counts[0][0] == "date":
+        return "date"
+
     # Unique values suggest that this is the sample id.
     if len(value_counts) == n and type_counts[0][0] != "real":
         return "unique_key"
@@ -223,6 +226,10 @@ def cast_type(values, data_type):
             except Exception:
                 out.append(np.nan)
         return None, np.array(out, dtype=np.float)
+
+    # encode and check both understand strings for the date type.
+    if data_type.subtype_of(types.Date):
+        return None, values
 
     raise ValueError(
         "Automatic type cast to '{}' is not yet supported.".format(

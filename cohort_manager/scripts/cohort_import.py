@@ -25,87 +25,19 @@ from .. import parser as cm_parser
 logger = logging.getLogger(__name__)
 
 
-def create_skeleton_from_file(filename, delimiter, encoding, known_missings):
-    """Infer data type from a filename."""
-    inferred_types = {}
-    examples = collections.defaultdict(list)
+def create_import_file(filenames, delimiter, encoding, known_missings):
+    """Parse data files and create the import file."""
 
-    with codecs.open(filename, "r", encoding) as f:
-        reader = csv.reader(f, delimiter=delimiter)
-        names = next(reader)
+    frames = []
+    for fn in filenames:
+        with codecs.open(fn, "r", encoding) as f:
+            path = os.path.abspath(fn)
+            df = _parse_file(f, path, delimiter, encoding, known_missings)
+            frames.append(df)
 
-        # Read up to 5000 examples.
-        i = 0
-        while i < 5000:
-            try:
-                row = next(reader)
-            except StopIteration:
-                break
+    dataset = pd.concat(frames)
 
-            for j, value in enumerate(row):
-                if value in known_missings:
-                    examples[names[j]].append("")
-                else:
-                    examples[names[j]].append(value)
-            i += 1
-
-    # Infer types from examples.
-    for column in examples:
-        inferred_types[column] = inference.infer_type(examples[column])
-
-    # Type cast the dataset.
-    codes = {}
-    for column in examples.keys():
-        t = None
-        try:
-            t = types.type_str(inferred_types[column])
-        except Exception:  # Type is not supported.
-            pass
-
-        code, examples[column] = inference.cast_type(examples[column], t)
-        codes[column] = code
-
-    # Infer relationship between columns.
-    mat = inference.build_mi_matrix(examples, inferred_types)
-    names, _ = mat
-
-    clusters = inference.hierarchical_clustering(mat, examples, inferred_types,
-                                                 codes)
-    name_cluster = list(zip(names, clusters))
-    cluster_numbers = collections.Counter(clusters)
-
-    # Write the Excel file and ask the user for curation.
-    # Rows: (group, name, parent, variable_type, import?)
-    dataset = []
-    for n in cluster_numbers:
-        for col, cluster in name_cluster:
-            if cluster == n:
-                type_name = inferred_types[col]
-                if type_name is None:
-                    type_name = ""
-
-                affected = unaffected = ""
-                code = codes[col]
-                if code is not None:
-                    affected = code.get(1, "")
-                    unaffected = code.get(0, "")
-
-                import_flag = bool(type_name and type_name != "text")
-
-                description = icd10 = ""
-
-                dataset.append((n, col, "", type_name, affected, unaffected,
-                                description, icd10, import_flag))
-
-    dataset = pd.DataFrame(
-        dataset,
-        columns=("group", "name", "parent", "variable_type", "affected",
-                 "unaffected", "description", "icd10", "import")
-    )
-
-    dataset_filename = os.path.basename(
-        os.path.splitext(filename)[0]
-    ) + "_import.xlsx"
+    dataset_filename = "cohort_manager_import.xlsx"
 
     writer = pd.ExcelWriter(dataset_filename, engine="xlsxwriter")
     dataset.to_excel(writer, "Variables", index=False)
@@ -113,17 +45,14 @@ def create_skeleton_from_file(filename, delimiter, encoding, known_missings):
     workbook = writer.book
     meta_sheet = workbook.add_worksheet("Metadata")
 
-    meta_sheet.write_string(0, 0, "filename")
-    meta_sheet.write_string(0, 1, filename)
+    meta_sheet.write_string(0, 0, "delimiter")
+    meta_sheet.write_string(0, 1, delimiter)
 
-    meta_sheet.write_string(1, 0, "delimiter")
-    meta_sheet.write_string(1, 1, delimiter)
+    meta_sheet.write_string(1, 0, "encoding")
+    meta_sheet.write_string(1, 1, encoding)
 
-    meta_sheet.write_string(2, 0, "encoding")
-    meta_sheet.write_string(2, 1, encoding)
-
-    meta_sheet.write_string(3, 0, "known_missings")
-    meta_sheet.write_string(3, 1, json.dumps(known_missings))
+    meta_sheet.write_string(2, 0, "known_missings")
+    meta_sheet.write_string(2, 1, json.dumps(known_missings))
 
     writer.save()
 
@@ -135,6 +64,70 @@ def create_skeleton_from_file(filename, delimiter, encoding, known_missings):
           "cohort-import build --import-file '{filename}' "
           "--cohort-name MY_COHORT\n\n"
           "".format(filename=dataset_filename))
+
+
+def _parse_file(f, path, delimiter, encoding, known_missings):
+    inferred_types = {}
+    examples = collections.defaultdict(list)
+
+    reader = csv.reader(f, delimiter=delimiter)
+    names = next(reader)
+
+    # Read up to 5000 examples.
+    i = 0
+    while i < 5000:
+        try:
+            row = next(reader)
+        except StopIteration:
+            break
+
+        for j, value in enumerate(row):
+            if value in known_missings:
+                examples[names[j]].append("")
+            else:
+                examples[names[j]].append(value)
+        i += 1
+
+    # Infer types from examples.
+    for column in examples:
+        inferred_types[column] = inference.infer_type(examples[column])
+
+    # Type cast the dataset.
+    dataset = []
+    for column in examples.keys():
+        t = None
+        try:
+            t = types.type_str(inferred_types[column])
+        except Exception:  # Type is not supported.
+            pass
+
+        code, examples[column] = inference.cast_type(examples[column], t)
+
+        # Write the Excel file and ask the user for curation.
+        type_name = inferred_types[column]
+        if type_name is None:
+            type_name = ""
+
+        affected = unaffected = ""
+        if code is not None:
+            affected = code.get(1, "")
+            unaffected = code.get(0, "")
+
+        import_flag = (type_name != "")
+
+        description = snomed = ""
+
+        dataset.append((column, column, path, "", type_name, affected,
+                        unaffected, description, snomed, import_flag))
+
+    dataset = pd.DataFrame(
+        dataset,
+        columns=("col_name", "name", "path", "parent", "variable_type",
+                 "affected", "unaffected", "description", "snomed-ct",
+                 "import")
+    )
+
+    return dataset
 
 
 def parse_args():
@@ -161,10 +154,11 @@ def parse_args():
 
     group = parse_parser.add_argument_group("Input file options")
     group.add_argument(
-        "--filename",
-        help="Filename of the CSV containing phenotype data.",
+        "filenames",
+        help="Filename(s) of the delimited files containing phenotype data.",
         type=str,
-        required=True
+        nargs="+",
+        action="store"
     )
 
     group.add_argument(
@@ -199,8 +193,8 @@ def parse_args():
         help=("The import description file generated during the 'parse' step. "
               "A list of import file names can also be provided to batch "
               "insert phenotype data (e.g. using bash globs)."),
-        nargs="+",
-        action="store"
+        type=str,
+        required=True
     )
 
     build_parser.add_argument(
@@ -215,17 +209,12 @@ def parse_args():
         known_missings = [""]
         known_missings += args.known_missings
 
-        create_skeleton_from_file(
-            args.filename, args.delimiter, args.encoding, known_missings,
+        create_import_file(
+            args.filenames, args.delimiter, args.encoding, known_missings,
         )
     elif args.command == "build":
-        at_least_one_failed = False
-        for filename in args.import_file:
-            success = cm_parser.parse_excel(filename, args.cohort_name)
-            if not success:
-                at_least_one_failed = True
-
-        if at_least_one_failed:  # Return with non-zero.
+        success = cm_parser.import_file(args.import_file, args.cohort_name)
+        if not success:
             quit(1)
 
 

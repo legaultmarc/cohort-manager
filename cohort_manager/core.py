@@ -161,7 +161,7 @@ class CohortManager(object):
         self.cur.execute(
             "CREATE TABLE phenotypes ("
             " name TEXT PRIMARY KEY,"
-            " icd10 TEXT,"
+            " snomed_ct_concept TEXT,"
             " parent TEXT,"
             " variable_type TEXT NOT NULL,"
             " crf_page INTEGER,"
@@ -288,7 +288,7 @@ class CohortManager(object):
 
         Known fields are:
             - name
-            - icd10
+            - snomed
             - parent
             - variable_type
             - crf_page
@@ -532,10 +532,10 @@ class CohortManager(object):
                                       "variable '{}'. The code name is "
                                       "'{}'.".format(phenotype, code_name))
 
-            _type_check(phenotype, values, variable_type, mapping)
+            variable_type.check(values, mapping, name=phenotype)
 
         else:
-            _type_check(phenotype, values, variable_type)
+            variable_type.check(values, name=phenotype)
 
         # If no exception was raised, store the data.
         self.data["data"].create_dataset(
@@ -1434,7 +1434,7 @@ class _Variable(object):
 
     def __invert__(self):
         if not self._is_discrete():
-            raise TypeError("Can't invert non-discrete variable (or "
+            raise TypeError("Can't invert discrete variables (or "
                             "case-only).")
 
         data = self.data.astype(float)
@@ -1558,16 +1558,3 @@ def vector_map(data, _map):
             out[data == key] = target
 
     return out
-
-
-def _type_check(name, values, _type, *check_args):
-    """Wraps type checks to provide better logging."""
-    exception = None
-    try:
-        _type.check(values, *check_args)
-    except types.InvalidValues as e:
-        exception = e
-        logger.warning("Variable '{}' failed data type validation checks and "
-                       "cannot be inserted.".format(name))
-    if exception is not None:
-        raise exception

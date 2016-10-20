@@ -87,7 +87,7 @@ def _get_numpy_float_array(values):
 class Type(object):
     """Parent type for all types."""
     @staticmethod
-    def check(values):
+    def check(values, name=None):
         """Check if a data vector is of the appropriate type.
 
         Raises an InvalidValues exception as a way of conveniently passing the
@@ -128,30 +128,38 @@ class Type(object):
 # Type subclasses.
 class Discrete(Type):
     @staticmethod
-    def check(values):
+    def check(values, name=None):
         try:
             values = np.array(values, dtype=float)
         except ValueError:
-            raise InvalidValues("Some values are non-numeric for Discrete "
-                                "variable.")
+            message = "Some values are non-numeric for Discrete variable"
+            if name:
+                message += " '{}'".format(name)
+            raise InvalidValues(message)
 
         extra = set(np.unique(values[~np.isnan(values)])) - {0, 1}
         if len(extra) != 0:
             extra = ", ".join([str(i) for i in list(extra)[:5]])
             if len(extra) > 5:
                 extra += ", ..."
-            raise InvalidValues(
+
+            message = (
                 "Authorized values for discrete variables are 0, 1 and np.nan."
-                "\nUnexpected values were observed ({})."
-                "".format(extra)
+                "\nUnexpected values were observed"
             )
+
+            if name:
+                message += " for variable '{}'".format(name)
+
+            message += " ({}).".format(extra)
+            raise InvalidValues(message)
 
         return True
 
 
 class Continuous(Type):
     @staticmethod
-    def check(values, _raise=False):
+    def check(values, name=None, _raise=False):
         """Check that the data vector is continuous.
 
         This is very hard to check.
@@ -177,9 +185,13 @@ class Continuous(Type):
         n_values = estimate_num_distinct(values)
 
         if n_values < 5:
-            message = ("There is a lot of redundancy in the values of this "
-                       "continuous variable. Perhaps it should be modeled "
-                       "as a factor or another variable type.")
+            block = "this continuous variable"
+            if name:
+                block = "'{}'".format(name)
+
+            message = ("There is a lot of redundancy in the values for {}. "
+                       "Perhaps it should be modeled as a factor or another "
+                       "variable type.".format(block))
             if _raise:
                 raise InvalidValues(message)
             logger.warning(message)  # pragma: no cover
@@ -187,9 +199,12 @@ class Continuous(Type):
         # Outlier check.
         common_outlier = stats.find_overrepresented_outlier(values)
         if common_outlier is not None:
+            block = ""
+            if name:
+                block = " for '{}'".format(name)
             message = ("The value '{}' is commonly found in the tails of the "
-                       "distribution. This could be because of bad coding of "
-                       "missing values.".format(common_outlier))
+                       "distribution{}. This could be because of bad coding "
+                       "of missing values.".format(common_outlier, block))
             if _raise:
                 raise InvalidValues(message)
             logger.warning(message)  # pragma: no cover
@@ -197,52 +212,61 @@ class Continuous(Type):
 
 class Integer(Continuous):
     @staticmethod
-    def check(values):
+    def check(values, name=None):
         super(Integer, Integer).check(values)
         data = _get_numpy_float_array(values)
         data = data[~np.isnan(data)]
         if np.nansum((data * 10) % 10) != 0:
+            block = ""
+            if name:
+                block = " for '{}'".format(name)
             raise InvalidValues(
-                "Some of the provided values are not integers."
+                "Some of the provided values{} are not integers.".format(block)
             )
 
 
 class PositiveInteger(Integer):
     @staticmethod
-    def check(values):
+    def check(values, name=None):
         super(PositiveInteger, PositiveInteger).check(values)
         data = _get_numpy_float_array(values)
         if np.any(data < 0):
             examples = np.unique(data[np.where(data < 0)[0]])[:4]
             examples = ", ".join([str(i) for i in examples])
-            raise InvalidValues("Negative values were observed while the type "
-                                "is PositiveInteger (e.g. {})."
-                                "".format(examples))
+            block = ""
+            if name:
+                block = " for '{}'".format(name)
+            raise InvalidValues("Negative values were observed{} while the "
+                                "type is PositiveInteger (e.g. {})."
+                                "".format(block, examples))
 
 
 class Year(PositiveInteger):
     @staticmethod
-    def check(values):
-        super(Year, Year).check(values)
+    def check(values, name=None):
+        super(Year, Year).check(values, name)
 
 
 class NegativeInteger(Integer):
     @staticmethod
-    def check(values):
-        super(NegativeInteger, NegativeInteger).check(values)
+    def check(values, name=None):
+        super(NegativeInteger, NegativeInteger).check(values, name)
 
         data = _get_numpy_float_array(values)
         if np.any(data > 0):
             examples = np.unique(data[np.where(data > 0)[0]])[:4]
             examples = ", ".join([str(i) for i in examples])
-            raise InvalidValues("Positive values were observed while the type "
-                                "is NegativeInteger (e.g. {})."
-                                "".format(examples))
+            block = ""
+            if name:
+                block = " for '{}'".format(name)
+            raise InvalidValues("Positive values were observed{} while the "
+                                "type is NegativeInteger (e.g. {})."
+                                "".format(block, examples))
 
 
 class Factor(Type):
     @staticmethod
-    def check(values, mapping):
+    def check(values, mapping, name=None):
         """Check that the data vector is consistent with a factor variable.
 
         This is done by looking at the code from the database and making sure
@@ -255,13 +279,16 @@ class Factor(Type):
         expected = set([i[0] for i in mapping])
         extra = observed - expected
         if extra:
+            block = ""
+            if name:
+                block = " '{}'".format(name)
             raise InvalidValues("Unknown encoding value(s) ({}) for factor "
-                                "variable.".format(extra))
+                                "variable{}.".format(extra, block))
 
 
 class Date(Type):
     @classmethod
-    def check(cls, values):
+    def check(cls, values, name=None):
         """Checks that the list of strings can be used to represent ISO 8601
         dates.
 
@@ -270,7 +297,7 @@ class Date(Type):
         """
         valid = True
         for i in values:
-            missing = i is None
+            missing = (i is None) or (i == "")
             try:
                 if np.isnan(i):
                     missing = True
@@ -286,10 +313,13 @@ class Date(Type):
                 valid = False
 
             if not valid:
+                block = ""
+                if name:
+                    block = " for '{}'".format(name)
                 raise InvalidValues(
-                    "Some of the values are not ISO 8601 dates. The expected "
-                    "format is: YYYY-MM-DD and some of the provided values "
-                    "had the following form: {}.".format(i)
+                    "Some of the values{} are not ISO 8601 dates. The "
+                    "expected format is: YYYY-MM-DD and some of the provided "
+                    "values had the following form: '{}'.".format(block, i)
                 )
 
             one_day = datetime.timedelta(days=1)
@@ -299,11 +329,14 @@ class Date(Type):
             )
 
             if not (bounds[0] < date < bounds[1]):
+                block = ""
+                if name:
+                    block = " for '{}'".format(name)
                 raise InvalidValues(
-                    "Because date are stored using Pandas, they are encoded "
+                    "Because dates are stored using Pandas, they are encoded "
                     "with nanosecond resolution and need to be between "
-                    "bounds defined by {} and {}. The following date is "
-                    "out of these bounds: {}.".format(*bounds, date)
+                    " {} and {}. The following date{} is out of these "
+                    "bounds: {}.".format(*bounds, block, date)
                 )
 
     @classmethod
@@ -360,11 +393,9 @@ class Date(Type):
             for i in range(n):
                 try:
                     date = cls._parse_date(values[i])
-                except Exception:
-                    date = None
-
-                if date:
                     out[i] = cls.date_to_int(date)
+                except Exception:
+                    pass
 
             return out
 
@@ -375,14 +406,17 @@ class Date(Type):
 
 class PastDate(Date):
     @classmethod
-    def check(cls, values):
-        super(PastDate, PastDate).check(values)
+    def check(cls, values, name=None):
+        super(PastDate, PastDate).check(values, name)
         for i in values:
             date = cls._parse_date(i)
             if date > datetime.datetime.today().date():
+                block = ""
+                if name:
+                    block = " for '{}'".format(name)
                 raise InvalidValues(
-                    "Some of the values are future dates (e.g. {})."
-                    "".format(i)
+                    "Some of the values{} are future dates (e.g. {})."
+                    "".format(block, i)
                 )
 
 

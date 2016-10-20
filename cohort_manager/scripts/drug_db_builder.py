@@ -101,7 +101,7 @@ def create_curation_file(args):
                "--delim '{delim}' "
                "--sample-column '{sample_column}' "
                "--drug-column '{drug_column}' "
-               "--database drug_database_for_curation.xlsx "
+               "--import-file drug_database_for_curation.xlsx "
                "--cohort-name MY_COHORT '{filename}'")
 
     command = command.format(

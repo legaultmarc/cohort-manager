@@ -22,12 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def find_drugs_in_query(query, min_score=DEFAULT_MIN_SCORE):
-    """Searches the query to find any element of drugs.
-
-    TODO. It would be best to prioritize matches in the CUSTOM database to
-    make it easy for users to override bad behaviour or unwanted matches.
-
-    """
+    """Searches the query to find any element of drugs."""
     if "PREFERRED" not in DRUG_DB or "SYNONYMS" not in DRUG_DB:
         _init_drug_db()
 
@@ -83,7 +78,7 @@ def _choose_hits(query, hits, keep_short=False):
     if not hits:
         return hits
 
-    # Sort by the distance to the query.
+    # Sort by difference in length to the query.
     hits = sorted(hits, key=lambda x: abs(len(x[1]) - len(query)))
 
     # Sort again with respect to score.
@@ -190,7 +185,11 @@ class _Segment(object):
 
 
 def find_drugs_in_queries(queries, min_score=DEFAULT_MIN_SCORE):
-    """Cached, multiprocessing version of find_drugs_in_query."""
+    """Cached, multiprocessing version of find_drugs_in_query.
+
+    This version is used in the drug database builder script.
+
+    """
     manager = multiprocessing.Manager()
     cache = manager.dict()
 
