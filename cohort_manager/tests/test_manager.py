@@ -7,6 +7,7 @@ import pandas as pd
 
 from . import datasets
 from .. import core
+from .. import backend
 from .. import types
 
 
@@ -32,14 +33,14 @@ class TestManager(unittest.TestCase):
         )
 
     def test_set_samples_np(self):
-        self.manager.set_samples(np.array(["a", "b", "c"], dtype=np.string_))
+        self.manager.set_samples(np.array(["a", "b", "c"]))
         self.assertTrue(
             np.all(self.manager.get_samples() == np.array(["a", "b", "c"]))
         )
 
     def test_get_samples(self):
         """Test the get_samples method."""
-        arr = np.array(["a", "b", "c", "d"], dtype=np.string_)
+        arr = np.array(["a", "b", "c", "d"])
         self.manager.set_samples(arr)
         self.assertTrue(self.manager.n == 4)
         self.assertTrue(
@@ -98,7 +99,7 @@ class TestManager(unittest.TestCase):
         # Add phenotype.
         params = {
             "name": "TestPhenotype",
-            "icd10": "C07",
+            "snomed": "22298006",
             "parent": "parent",
             "variable_type": "factor",
             "crf_page": 3,
@@ -245,7 +246,7 @@ class TestManager(unittest.TestCase):
 
     def test_reset_samples_error(self):
         self.manager.set_samples(list("ABCD"))
-        with self.assertRaises(core.FrozenCohortError):
+        with self.assertRaises(backend.FrozenCohortError):
             self.manager.set_samples(list("ABCDE"))
 
     def test_add_data(self):
@@ -265,7 +266,7 @@ class TestManager(unittest.TestCase):
     def test_add_data_no_samples(self):
         """Add data before setting sample order."""
         self.manager.add_phenotype(name="test", variable_type="continuous")
-        with self.assertRaises(core.UnknownSamplesError):
+        with self.assertRaises(backend.UnknownSamplesError):
             self.manager.add_data("test", [1, 2, 3, 4, 5, 6])
 
     def test_add_data_bad_number(self):
@@ -329,7 +330,7 @@ class TestManager(unittest.TestCase):
             )
         self.assertEqual(
             cm.exception.args[0],
-            "There is a lot of redundancy in the values of this continuous "
+            "There is a lot of redundancy in the values for this continuous "
             "variable. Perhaps it should be modeled as a factor or another "
             "variable type."
         )

@@ -3,15 +3,14 @@ Parse the Excel file used to build the cohort.
 """
 
 import logging
-import collections
 import json
 
 import pandas as pd
 import numpy as np
 
 from .core import CohortManager
-from . import inference
-from . import types
+# from . import inference
+# from . import types
 
 
 logger = logging.getLogger(__name__)
@@ -27,214 +26,146 @@ class InvalidConfig(Exception):
 
 def import_file(filename, cohort_name):
     """Fill the database using the provided Excel configuration file."""
-    # Read the columns data.
-    variables = pd.read_excel(filename, sheetname="Variables")
 
-    # Keep only variables that are flagged for importation.
-    variables = variables.loc[variables["import"].astype(int) == 1, :]
+    # Read the file.
+    data = pd.read_excel(filename, sheetname=None)  # Dict of DataFrames
+    metadata = data["Metadata"]
+    metadata = {i: j for i, j in metadata.values}
+    # Known missings is a list.
+    metadata["known_missings"] = json.loads(metadata["known_missings"])
 
-    # Set the name as the index.
-    try:
-        variables = variables.set_index("name", verify_integrity=True)
-    except ValueError:
-        dups = list(variables.loc[variables.duplicated("name"), "name"])
+    variables = data["Variables"]
+    variables.index = range(2, variables.shape[0] + 2)
+
+    # Check variables data for name conflicts.
+    variables = _clean_global_file(variables)
+
+    # Create a CohortManager.
+    manager = CohortManager(cohort_name)
+
+    # Start parsing individual files.
+    for filename in variables["path"].unique():
+        file_variables = variables.loc[
+            variables["path"] == filename, :
+        ]
+        data = _read_and_clean(filename, file_variables, metadata)
+        if data is None:
+            logger.debug("SKIPPING '{}'".format(filename))
+            continue
+
+        _do_import(manager, variables, data)
+
+
+def _clean_global_file(variables):
+    # Remove variables if "import" is False.
+    variables = variables.loc[variables["import"], :]
+
+    # Check for name conflicts.
+    dups = variables.duplicated(subset="database_name", keep=False)
+
+    # Ignore the name conflicts in the sample IDs.
+    dups = dups ^ (variables["variable_type"] == "unique_key")
+
+    if dups.any():
+        dups_list = list(set(variables["database_name"][dups]))
+
+        logger.warning(
+            "Some variables will NOT be imported because they have duplicated "
+            "names: {}.".format(", ".join(_quote_li(dups_list)))
+        )
+
+        # Remove the duplicates.
+        variables = variables.loc[~dups, :]
+
+    # Check for missing required information.
+    required_cols = ["column_name", "database_name", "path"]
+    nulls = variables[required_cols].isnull()
+    if np.any(nulls.values):
+        null_rows = np.any(nulls.values, axis=1)
+        # Convert to excel index.
+        excel_null_rows = [str(i) for i in nulls.iloc[null_rows, :].index]
+
+        logger.warning(
+            "Some variables will NOT be imported because they are missing "
+            "data in at least one of the mandatory columns ({}) in the "
+            "following rows: {}.".format(
+                ", ".join(_quote_li(required_cols)),
+                ", ".join(excel_null_rows)
+            )
+        )
+
+        # Remove rows with missing data.
+        variables = variables.dropna(axis=0, subset=required_cols)
+
+    return variables
+
+
+def _read_and_clean(filename, variables, metadata):
+    # Check that there is a sample_id column.
+    key = np.where(variables["variable_type"] == "unique_key")[0]
+
+    if len(key) < 1:
         logger.critical(
-            "The import file contains duplicate names ({}). "
-            "Please make sure that entries from the 'name' column are unique."
-            "".format(dups)
+            "The file '{}' WILL NOT BE IMPORTED because there was no variable "
+            "with the 'unique_key' type which is used to represent the column "
+            "containing sample IDs.".format(filename)
         )
         return
 
-    # Read the metadata sheet containing information about the source file.
-    metadata = pd.read_excel(filename, sheetname="Metadata", header=None)
+    elif len(key) > 1:
+        logger.critical(
+            "The file '{}' WILL NOT BE IMPORTED because there are multiple "
+            "variables with the 'unique_key' type which is used to represent "
+            "the (single) column containing sample IDs.".format(filename)
+        )
+        return
 
-    # Default values.
-    metadata_dict = {"encoding": "utf-8", "delimiter": ",",
-                     "known_missings": "[]"}
-    for i, row in metadata.iterrows():
-        metadata_dict[row[0]] = row[1]
+    key = key[0]
 
-    metadata_dict["known_missings"] = json.loads(
-        metadata_dict["known_missings"]
+    # Read the file and set the index.
+    data = pd.read_csv(
+        filename,
+        delimiter=metadata["delimiter"],
+        usecols=list(variables["column_name"])
     )
 
-    manager = CohortManager(cohort_name)
-    for filename in variables["path"].unique():
-        parse_file(manager, filename, variables, metadata_dict)
+    key_name = variables.iloc[key, :]["column_name"]
 
-
-def get_sample_id_column(filename, variables):
-    keys = variables.loc[variables["variable_type"] == "unique_key", :].index
-    keys = list(keys)
-
-    if len(keys) == 0:
+    try:
+        data.set_index(key_name, verify_integrity=True, inplace=True)
+    except ValueError:
         logger.critical(
-            "Can't import phenotypes from '{}' because there is no field of "
-            "type 'unique_key' (for the sample IDs).".format(filename)
-        )
-        return False
-
-    elif len(keys) > 1:
-        logger.critical(
-            "Can't import phenotypes from '{}' because the column containing "
-            "sample IDs is not unique (only one column of type 'unique_key' "
-            "should be in the import file.".format(filename)
-        )
-        return False
-
-    return keys.pop()
-
-
-def parse_file(manager, filename, variables, metadata):
-    logger.info("Processing data from '{}'.".format(filename))
-
-    # Use only the relevant subset.
-    variables = variables.loc[variables["path"] == filename, :]
-
-    # Make sure names are unique within this subset.
-    if variables["col_name"].unique().shape[0] != variables.shape[0]:
-        logger.critical(
-            "Column name definitions are not unique for file '{}'."
-            "".format(filename)
+            "The file '{}' WILL NOT BE IMPORTED because the index column "
+            "('{}') contains duplicates.".format(filename, key_name)
         )
         return
 
-    # Get the name of the sample ID column.
-    sample_column = get_sample_id_column(filename, variables)
-    if not sample_column:
-        return
-
-    samples = []
-
-    sep = metadata["delimiter"]
-    with open(filename, "r", encoding=metadata["encoding"]) as f:
-        header = next(f).strip()
-        header = header.split(sep)
-
-        variable_to_index = dict([(j, i) for i, j in enumerate(header)])
-        data = collections.defaultdict(list)
-
-        for line in f:
-            line = line.rstrip().split(sep)
-
-            # Build the list of sample IDs at the same time.
-            samples.append(line[variable_to_index[sample_column]])
-
-            # Keep only the data.
-            for variable in variables["col_name"]:
-                if variable == sample_column:
-                    continue
-
-                try:
-                    index = variable_to_index[variable]
-                except KeyError:
-                    logger.critical(
-                        "Could not find column '{}' in file '{}'."
-                        "".format(variable, filename)
-                    )
-
-                if line[index] in metadata["known_missings"]:
-                    data[variable].append("")
-                else:
-                    data[variable].append(line[index])
-
-    # Type cast and insert.
-    for variable in data.keys():
-        row = int(np.where(variables["col_name"] == variable)[0][0])
-        try:
-            _type = types.type_str(variables.iloc[row]["variable_type"])
-        except Exception:
-            logger.warning("Could not load variable '{}' because of it has an "
-                           "unknown type.".format(variable))
-            continue
-
-        if _type.subtype_of(types.Discrete):
-            # Encode manually.
-            # Get the code.
-            affected = float(variables.iloc[row]["affected"])
-            unaffected = float(variables.iloc[row]["unaffected"])
-
-            v = np.empty(len(data[variable]), dtype=np.float)
-            for i in range(v.shape[0]):
-                value = data[variable][i]
-
-                try:
-                    value = float(value)
-                except ValueError:
-                    v[i] = np.nan
-                    continue
-
-                if value == affected:
-                    v[i] = 1
-                elif value == unaffected:
-                    v[i] = 0
-                else:
-                    v[i] = np.nan
-
-            data[variable] = v
-
-        # We don't do recoding for non-discrete variables.
-        else:
-            try:
-                data[variable] = inference.cast_type(data[variable], _type)[1]
-            except ValueError:
-                logger.warning(
-                    "Could not insert variable '{}' because its data type "
-                    "({}) can't be automatically encoded."
-                    "".format(variable, _type.__name__)
-                )
-                continue
-
-        # Check if it is a new cohort and set or check the sample order.
-        if not (manager["frozen"] == "yes"):
-            manager.set_samples(samples)
-        else:
-            samples = np.array(samples)
-            db_samples = manager.get_samples()
-            if not np.all(samples == db_samples):
-                raise NotImplementedError(
-                    "Automatic import of permutated samples is not yet "
-                    "supported."
-                )
-
-        # Get other meta-data.
-        description = variables.iloc[row]["description"]
-        snomed = variables.iloc[row]["snomed-ct"]
-
-        name = variables.index[row]
-
-        manager.add_phenotype(
-            name=name, variable_type=_type.__name__,
-            description=description, snomed=snomed,
-        )
-
-        try:
-            manager.add_data(
-                name, data[variable]
-            )
-        except types.InvalidValues as e:
-            logger.warning(e.message)
-            manager.delete(variable, _db_only=True)
-
-    # Build hierarchy.
-    _build_hierarchy(variables["parent"].dropna(), manager)
-
-    manager.commit()
-    return True
+    return data
 
 
-def _build_hierarchy(hierarchy, manager):
-    """Update phenotype parent pointers."""
-    available_phenotypes = set(manager.get_phenotypes_list())
-    for child, parent in hierarchy.iteritems():
-        # Check that the parent exists.
-        if parent not in available_phenotypes:
-            logger.warning(
-                "Could not set parent for '{}' to '{}' because the parent is "
-                "not in the manager.".format(child, parent)
-            )
-            continue
+def _do_import(manager, variables, data):
+    # Check if the manager has a sample list.
+    samples = manager.get_samples()
+    if samples is None:
+        # No sample order has been set.
+        manager.set_samples(data.index.values.astype(np.string_))
 
-        manager.update_phenotype(child, parent=parent)
+    else:
+        # Build an empty DataFrame indexed by the current order.
+        df = pd.DataFrame({"sample_id": manager.get_samples()})
+        df.set_index("sample_id", inplace=True)
 
-    manager.commit()
+        # Check if there are new samples.
+        diff = data.index.difference(df.index)
+        if len(diff) > 0:
+            # There are new samples.
+            print("FIXME: New Samples '{}'.".format(diff))
+
+        data = df.join(data)
+
+    # Import individual variables TODO
+    print(data)
+
+
+def _quote_li(li):
+    return ["'{}'".format(str(s)) for s in li]

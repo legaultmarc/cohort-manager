@@ -45,14 +45,17 @@ def create_import_file(filenames, delimiter, encoding, known_missings):
     workbook = writer.book
     meta_sheet = workbook.add_worksheet("Metadata")
 
-    meta_sheet.write_string(0, 0, "delimiter")
-    meta_sheet.write_string(0, 1, delimiter)
+    meta_sheet.write_string(0, 0, "key")
+    meta_sheet.write_string(0, 1, "value")
 
-    meta_sheet.write_string(1, 0, "encoding")
-    meta_sheet.write_string(1, 1, encoding)
+    meta_sheet.write_string(1, 0, "delimiter")
+    meta_sheet.write_string(1, 1, delimiter)
 
-    meta_sheet.write_string(2, 0, "known_missings")
-    meta_sheet.write_string(2, 1, json.dumps(known_missings))
+    meta_sheet.write_string(2, 0, "encoding")
+    meta_sheet.write_string(2, 1, encoding)
+
+    meta_sheet.write_string(3, 0, "known_missings")
+    meta_sheet.write_string(3, 1, json.dumps(known_missings))
 
     writer.save()
 
@@ -115,16 +118,16 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
 
         import_flag = (type_name != "")
 
-        description = snomed = ""
+        description = snomed = parent = ""
 
-        dataset.append((column, column, path, "", type_name, affected,
+        dataset.append((column, column, path, parent, type_name, affected,
                         unaffected, description, snomed, import_flag))
 
     dataset = pd.DataFrame(
         dataset,
-        columns=("col_name", "name", "path", "parent", "variable_type",
-                 "affected", "unaffected", "description", "snomed-ct",
-                 "import")
+        columns=("column_name", "database_name", "path", "parent",
+                 "variable_type", "affected", "unaffected", "description",
+                 "snomed-ct", "import")
     )
 
     return dataset

@@ -13,14 +13,13 @@ import datetime
 import uuid
 import os
 
-import six
-import h5py
 import numpy as np
 import pandas as pd
 from six.moves import range
 
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import types
+from . import backend
 from .drugs.chembl import ChEMBL
 from .drugs.atc import get_atc_code_level
 
@@ -29,24 +28,7 @@ logger = logging.getLogger(__name__)
 DRUG_EXTRA_FIELDS = (
     "start_date", "end_date", "indication", "dose", "dose_unit"
 )
-
-
-class UnknownSamplesError(Exception):
-    def __init__(self, value=None):
-        self.value = value
-
-    def __str__(self):
-        if self.value is None:
-            # Default message.
-            return ("Sample order was not set. It needs to be known before "
-                    " data is added to enforce integrity checks.")
-        return self.value
-
-
-class FrozenCohortError(Exception):
-    def __str__(self):
-        return ("Once the sample order has been set, it is fixed and can't "
-                "be changed.")
+DEFAULT_BACKEND = backend.SQLiteBackend
 
 
 class CohortDataError(Exception):
@@ -120,7 +102,7 @@ class CohortManager(object):
         self._discover_install()
         self.tree = None  # This is built when the manager is commited.
 
-        atexit.register(self._hdf5_close)
+        atexit.register(self.backend.close)
 
     def _discover_install(self):
         """Check if there is a retrievable manager at location.
@@ -131,27 +113,22 @@ class CohortManager(object):
         self.db_path = os.path.join(self.path, "phenotypes.db")
         db_init = not os.path.isfile(self.db_path)
 
-        self.data_path = os.path.join(self.path, "data.hdf5")
-        data_init = not os.path.isfile(self.data_path)
-
         self.con = sqlite3.connect(self.db_path)
         self.cur = self.con.cursor()
-
-        self.data = h5py.File(self.data_path)
 
         if db_init:
             self._create()
 
-        if data_init:
-            self._hdf5_init()
-
-        if db_init and data_init:
+        if db_init:
             logger.info("Detecting cohorts... [NEW COHORT]")
         else:
             logger.info("Detecting cohorts... [RESTORE COHORT]")
 
         logger.info("Database file is: {}".format(self.db_path))
-        logger.info("Data file is: {}".format(self.data_path))
+
+        self.backend = DEFAULT_BACKEND()
+        self.backend.connect(self.path)
+        self.backend.log()
 
     def _create(self):
         """SQL CREATE statements."""
@@ -209,10 +186,6 @@ class CohortManager(object):
 
         self.con.commit()
 
-    def _hdf5_init(self):
-        """Create the relevant HDF5 datasets."""
-        self.data.create_group("data")
-
     def _check_phenotype_fields(self, fields):
         extra = set(fields) - set(PHENOTYPE_COLUMNS)
 
@@ -255,23 +228,15 @@ class CohortManager(object):
     def __exit__(self, *args):
         return self.close()
 
-    def _hdf5_close(self):
-        try:
-            self.data.close()
-        except Exception:
-            pass
-
     def close(self):
-        self._hdf5_close()
+        self.backend.close()
         self.con.commit()
         self.con.close()
 
     # Public API.
     @property
     def n(self):
-        if self["frozen"] == "yes":
-            return self.data["samples"].shape[0]
-        return None
+        return self.backend.n
 
     def rebuild_tree(self):
         """Rebuild the phenotype tree."""
@@ -465,24 +430,10 @@ class CohortManager(object):
     def set_samples(self, samples):
         """Set the sample IDs and order.
 
-        This can take either an ndarray of dtype `np.string_` or a regular
-        Python array of str.
+        This can take any iterable of IDs.
 
         """
-        if type(samples) is np.ndarray:
-            assert np.issubdtype(samples.dtype, np.string_)
-        else:
-            assert isinstance(samples[0], six.string_types), (
-                "Sample IDs need to be strings."
-            )
-            samples = np.array(samples, dtype=np.string_)
-
-        if self["frozen"] == "yes":
-            raise FrozenCohortError()
-
-        self.data.create_dataset("samples", data=samples, compression="gzip")
-        self._cache["samples"] = samples.astype(str)
-        self["frozen"] = "yes"
+        self.backend.set_samples(samples)
 
     def add_data(self, phenotype, values):
         """Add a data vector to the cohort."""
@@ -501,19 +452,6 @@ class CohortManager(object):
 
         variable_type = types.type_str(meta["variable_type"])
         code_name = meta.get("code_name")
-
-        if self["frozen"] != "yes":
-            raise UnknownSamplesError()
-
-        n = self.n
-        if len(values) != n:
-            raise ValueError(
-                "Expected {} values, got {}.".format(n, len(values))
-            )
-
-        if phenotype in self.data["data"].keys():
-            raise ValueError("Data for '{}' is already in the database."
-                             "".format(phenotype))
 
         # Because checking for factor variables is a bit different, we do
         # additional checks.
@@ -538,11 +476,7 @@ class CohortManager(object):
             variable_type.check(values, name=phenotype)
 
         # If no exception was raised, store the data.
-        self.data["data"].create_dataset(
-            phenotype,
-            data=variable_type.encode(values),
-            compression="gzip",
-        )
+        self.backend.add_data(phenotype, variable_type.encode(values))
 
     # Get information.
     def get_samples(self):
@@ -556,13 +490,8 @@ class CohortManager(object):
         if cached_samples is not None:
             return cached_samples
 
-        try:
-            self._cache["samples"] = np.array(
-                [i.decode("utf-8") for i in self.data["samples"]]
-            )
-            return self._cache["samples"]
-        except KeyError:
-            return None
+        self._cache["samples"] = self.backend.get_samples()
+        return self._cache["samples"]
 
     def get_phenotype(self, phenotype):
         """Get information on the phenotype."""
@@ -878,11 +807,8 @@ class CohortManager(object):
         default, converts the dataset to a numpy array).
 
         """
-        try:
-            data = self.data["data/{}".format(phenotype)]
-            return cm_type.decode(data)
-        except KeyError:
-            raise KeyError("No data for '{}'.".format(phenotype))
+        data = self.backend.get_data(phenotype)
+        return cm_type.decode(data)
 
     def get_data(self, phenotype):
         """Get a phenotype vector as a numpy array."""
@@ -992,7 +918,7 @@ class CohortManager(object):
 
         # Deleting the data if the phenotype is not a dummy one
         if not (is_dummy or _db_only):
-            del self.data["data/{}".format(phenotype)]
+            self.backend.delete_data(phenotype)
 
         # Committing
         self.commit()
@@ -1014,10 +940,7 @@ class CohortManager(object):
         )
 
         # Update the name in the data.
-        new_name = "data/{}".format(new_name)
-        old_name = "data/{}".format(old_name)
-        self.data[new_name] = self.data[old_name]
-        del self.data[old_name]
+        self.backend.rename_variable(old_name, new_name)
 
         self.commit()
 
@@ -1183,7 +1106,7 @@ class CohortManager(object):
         logger.info("Making sure that data is available for all phenotypes "
                     "in the database.")
         missing = set()
-        available = set(self.data["data"].keys())
+        available = self.backend.get_variables()
         for name in self.get_phenotypes_list():
             if name not in available:
                 missing.add(name)
