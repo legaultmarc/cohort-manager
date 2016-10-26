@@ -77,8 +77,9 @@ def setup_package():
                      "Topic :: Scientific/Engineering :: Bio-Informatics"],
         test_suite="cohort_manager.tests.test_suite",
         keywords="bioinformatics genomics phewas epidemiology cohort",
-        install_requires=["numpy >= 1.8.1", "pandas >= 0.15", "h5py >= 2.5",
-                          "six >= 1.10", "Unidecode >= 0.4.17"],
+        install_requires=["numpy >= 1.8.1", "pandas >= 0.15", "six >= 1.10",
+                          "psycopg2 >= 2.6", "scipy >= 0.18",
+                          "Unidecode >= 0.4.17"],
         zip_safe=False,
         ext_modules=[
             string_search_extension(),

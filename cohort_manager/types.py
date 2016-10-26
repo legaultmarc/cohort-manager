@@ -329,6 +329,7 @@ class Date(Type):
             )
 
             if not (bounds[0] < date < bounds[1]):
+                a, b = bounds
                 block = ""
                 if name:
                     block = " for '{}'".format(name)
@@ -336,7 +337,7 @@ class Date(Type):
                     "Because dates are stored using Pandas, they are encoded "
                     "with nanosecond resolution and need to be between "
                     " {} and {}. The following date{} is out of these "
-                    "bounds: {}.".format(*bounds, block, date)
+                    "bounds: {}.".format(a, b, block, date)
                 )
 
     @classmethod
