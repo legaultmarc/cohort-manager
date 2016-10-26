@@ -27,6 +27,9 @@ class InvalidConfig(Exception):
 def import_file(filename, cohort_name):
     """Fill the database using the provided Excel configuration file."""
 
+    # Create a CohortManager.
+    manager = CohortManager(cohort_name)
+
     # Read the file.
     data = pd.read_excel(filename, sheetname=None)  # Dict of DataFrames
     metadata = data["Metadata"]
@@ -40,9 +43,6 @@ def import_file(filename, cohort_name):
     # Check variables data for name conflicts.
     variables = _clean_global_file(variables)
 
-    # Create a CohortManager.
-    manager = CohortManager(cohort_name)
-
     # Start parsing individual files.
     for filename in variables["path"].unique():
         file_variables = variables.loc[
@@ -53,7 +53,7 @@ def import_file(filename, cohort_name):
             logger.debug("SKIPPING '{}'".format(filename))
             continue
 
-        _do_import(manager, variables, data)
+        _do_import(manager, file_variables, data)
 
 
 def _clean_global_file(variables):
@@ -148,23 +148,38 @@ def _do_import(manager, variables, data):
     samples = manager.get_samples()
     if samples is None:
         # No sample order has been set.
-        manager.set_samples(data.index.values.astype(np.string_))
+        manager.set_samples(data.index.values)
 
     else:
+        diff = set(data.index) - set(manager.get_samples())
+
+        # Check if there are new samples.
+        if len(diff) > 0:
+            # Add the new samples.
+            for sample in diff:
+                manager.add_sample(sample)
+
         # Build an empty DataFrame indexed by the current order.
         df = pd.DataFrame({"sample_id": manager.get_samples()})
         df.set_index("sample_id", inplace=True)
 
-        # Check if there are new samples.
-        diff = data.index.difference(df.index)
-        if len(diff) > 0:
-            # There are new samples.
-            print("FIXME: New Samples '{}'.".format(diff))
-
+        # Represent the data with respect to the manager's order.
         data = df.join(data)
 
-    # Import individual variables TODO
-    print(data)
+    # Import individual variables.
+    for tu in variables.itertuples():
+        if tu.variable_type == "unique_key":
+            continue
+
+        manager.add_phenotype(
+            name=tu.database_name,
+            snomed=tu.snomed_ct,
+            parent=tu.parent,
+            variable_type=tu.variable_type,
+            description=tu.description,
+        )
+
+        manager.add_data(tu.database_name, data[tu.column_name])
 
 
 def _quote_li(li):

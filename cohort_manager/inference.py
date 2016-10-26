@@ -105,7 +105,7 @@ def infer_type(li, max_size=5000, known_missings=None):
     # There is at least some heterogeneity.
     if len(value_counts) > 5:
         numeric_types = {"positive_integer", "negative_integer", "real",
-                         "zero"}
+                         "zero", "past_year"}
 
         if not set([i[0] for i in type_counts]) - numeric_types:
             return "continuous"

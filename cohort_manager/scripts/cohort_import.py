@@ -116,7 +116,7 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
             affected = code.get(1, "")
             unaffected = code.get(0, "")
 
-        import_flag = (type_name != "")
+        import_flag = type_name not in ("", "text")
 
         description = snomed = parent = ""
 
@@ -127,7 +127,7 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
         dataset,
         columns=("column_name", "database_name", "path", "parent",
                  "variable_type", "affected", "unaffected", "description",
-                 "snomed-ct", "import")
+                 "snomed_ct", "import")
     )
 
     return dataset

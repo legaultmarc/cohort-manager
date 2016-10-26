@@ -143,7 +143,6 @@ class CohortManager(object):
             " snomed_ct_concept TEXT,"
             " parent TEXT,"
             " variable_type TEXT NOT NULL,"
-            " crf_page INTEGER,"
             " description TEXT,"
             " code_name TEXT,"
             " FOREIGN KEY(parent) REFERENCES phenotypes(name)"
@@ -258,7 +257,6 @@ class CohortManager(object):
             - snomed
             - parent
             - variable_type
-            - crf_page
             - description
             - code_name
 
@@ -281,7 +279,7 @@ class CohortManager(object):
                 raise TypeError("Factor variables need a 'code_name'.")
 
         self.cur.execute(
-            "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO phenotypes VALUES (?, ?, ?, ?, ?, ?)",
             tuple(values)
         )
         self.commit()
@@ -479,6 +477,11 @@ class CohortManager(object):
 
         # If no exception was raised, store the data.
         self.backend.add_data(phenotype, variable_type.encode(values))
+
+    def add_sample(self, sample_id):
+        self.backend.add_sample(sample_id)
+        if "samples" in self._cache:
+            del self._cache["samples"]
 
     # Get information.
     def get_samples(self):

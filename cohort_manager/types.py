@@ -379,7 +379,7 @@ class Date(Type):
 
     @classmethod
     def encode(cls, values, from_type=str):
-        if not values:
+        if len(values) == 0:
             return values
 
         # If items are already dates, we just convert to int.

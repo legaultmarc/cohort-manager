@@ -102,7 +102,6 @@ class TestManager(unittest.TestCase):
             "snomed": "22298006",
             "parent": "parent",
             "variable_type": "factor",
-            "crf_page": 3,
             "description": "Favorite animal",
             "code_name": "c",
         }
@@ -226,21 +225,21 @@ class TestManager(unittest.TestCase):
 
     def test_update_phenotype(self):
         self.test_add_data()
-        self.manager.update_phenotype("age", crf_page=3)
+        self.manager.update_phenotype("age", description="test")
         phen = self.manager.get_phenotype("age")
-        self.assertEqual(phen["crf_page"], 3)
+        self.assertEqual(phen["description"], "test")
 
     def test_update_phenotype_unset(self):
         self.manager.set_samples(list("ABCDEF"))
         self.manager.add_phenotype(
             name="age",
             variable_type="continuous",
-            crf_page=3
+            description="apple"
         )
         self.manager.add_data("age", [10, 21, 30, 39, 82, 39])
-        self.manager.update_phenotype("age", crf_page=None)
+        self.manager.update_phenotype("age", description=None)
         self.assertEqual(
-            self.manager.get_phenotype("age")["crf_page"],
+            self.manager.get_phenotype("age")["description"],
             None
         )
 
