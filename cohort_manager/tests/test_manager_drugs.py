@@ -23,10 +23,12 @@ def _build_manager():
 @unittest.skipIf(not CHEMBL_INSTALLED, NO_CHEMBL_MESSAGE)
 class TestManagerDrugs(unittest.TestCase):
     def setUp(self):
-        self.tearDown()
         self.manager = _build_manager()
 
     def tearDown(self):
+        if not self.manager.closed:
+            self.manager.close()
+
         try:
             shutil.rmtree("_TestManager")
         except FileNotFoundError:

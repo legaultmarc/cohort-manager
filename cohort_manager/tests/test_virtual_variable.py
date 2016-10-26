@@ -40,7 +40,6 @@ _nan_comparison = np.vectorize(_nan_comparison, excluded=[2], otypes=[float])
 
 class TestVariable(unittest.TestCase):
     def setUp(self):
-        self.tearDown()
         self.manager = core.CohortManager("_TestManager")
         self.data = {}
 
@@ -87,6 +86,9 @@ class TestVariable(unittest.TestCase):
         )
 
     def tearDown(self):
+        if not self.manager.closed:
+            self.manager.close()
+
         try:
             shutil.rmtree("_TestManager")
         except Exception:

@@ -16,10 +16,12 @@ except ChEMBLNotInstalled:
 
 class TestDrugSearch(unittest.TestCase):
     def setUp(self):
-        self.tearDown()
         self.manager = CohortManager("_TestManager")
 
     def tearDown(self):
+        if not self.manager.closed:
+            self.manager.close()
+
         try:
             shutil.rmtree("_TestManager")
         except FileNotFoundError:
