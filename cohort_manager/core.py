@@ -87,6 +87,7 @@ class CohortManager(object):
 
     """
     def __init__(self, name, path=None):
+        self.closed = False
         self.name = name
         if path:
             self.path = os.path.join(path, name)
@@ -230,6 +231,7 @@ class CohortManager(object):
         return self.close()
 
     def close(self):
+        self.closed = True
         self.backend.close()
         self.con.commit()
         self.con.close()

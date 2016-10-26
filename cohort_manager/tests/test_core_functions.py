@@ -1,3 +1,4 @@
+import os
 import shutil
 import unittest
 
@@ -58,6 +59,9 @@ class TestManager(unittest.TestCase):
 
     def test_permutation(self):
         """Test the Permutation class (core logic)."""
+        if os.path.isdir("_TestManager"):
+            raise RuntimeError("Cohort directory already exists.")
+
         manager = core.CohortManager("_TestManager")
         manager.set_samples(list("abcdef"))
         manager.add_phenotype(name="p1", variable_type="continuous")
@@ -70,6 +74,7 @@ class TestManager(unittest.TestCase):
         perm = core.Permutation(manager, ["a", "c"], allow_subset=True)
         v3 = perm.get_data("p1")
 
+        manager.close()
         shutil.rmtree("_TestManager")
 
         np.testing.assert_array_equal(
@@ -90,6 +95,9 @@ class TestManager(unittest.TestCase):
 
     def test_permutation_subset(self):
         """Test implicit subsetting in Permutation (not accepted)."""
+        if os.path.isdir("_TestManager"):
+            raise RuntimeError("Cohort directory already exists.")
+
         manager = core.CohortManager("_TestManager")
         manager.set_samples(list("abcdef"))
         manager.add_phenotype(name="p1", variable_type="continuous")
@@ -99,10 +107,14 @@ class TestManager(unittest.TestCase):
             # Missing "e" and not subset=True
             core.Permutation(manager, ["f", "d", "b", "c", "a"])
 
+        manager.close()
         shutil.rmtree("_TestManager")
 
     def test_permutation_extra(self):
         """Test unknown samples in Permutation (not accepted)."""
+        if os.path.isdir("_TestManager"):
+            raise RuntimeError("Cohort directory already exists.")
+
         manager = core.CohortManager("_TestManager")
         manager.set_samples(list("abcdef"))
         manager.add_phenotype(name="p1", variable_type="continuous")
@@ -112,4 +124,5 @@ class TestManager(unittest.TestCase):
             # z is unknown.
             core.Permutation(manager, ["f", "d", "z", "c", "a"])
 
+        manager.close()
         shutil.rmtree("_TestManager")
