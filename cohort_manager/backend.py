@@ -316,3 +316,18 @@ class SQLiteBackend(SQLBasedBackend):
         logger.info("Using backend {} connected to '{}'.".format(
             self.__class__.__name__, self.filename
         ))
+
+
+def backend_from_string(s):
+    choices = {
+        "SQLiteBackend": SQLiteBackend,
+    }
+
+    if s not in choices:
+        raise ValueError(
+            "Unknown backend '{}'. Choices are: {}."
+            "".format(s, ", ".join(choices.keys()))
+        )
+
+    else:
+        return choices[s]()

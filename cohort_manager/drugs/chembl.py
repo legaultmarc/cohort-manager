@@ -12,30 +12,17 @@ from __future__ import division, print_function
 
 import collections
 import base64
-import os
 import logging
 
 import psycopg2
 
 
 from . import atc
+from ..config import configuration
 
 
 logger = logging.getLogger(__name__)
 
-
-DB_HOST = os.environ.get("DB_CHEMBL_HOST", "localhost")
-DB_PORT = os.environ.get("DB_CHEMBL_PORT", 5432)
-DB_NAME = os.environ.get("DB_CHEMBL_NAME")
-DB_USERNAME = os.environ.get("DB_CHEMBL_USERNAME")
-DB_PASSWORD = os.environ.get("DB_CHEMBL_PASSWORD")
-if not DB_PASSWORD:
-    try:
-        DB_PASSWORD = base64.b64decode(
-            os.environ.get("DB_CHEMBL_B64_PASSWORD")
-        ).decode("utf-8")
-    except TypeError:
-        pass
 
 # Data sources used for synonym search.
 _SYNONYM_SOURCES = ("USAN", "USP", "FDA", "TRADE_NAME")
@@ -53,31 +40,40 @@ class ChEMBLNotInstalled(Exception):
 class ChEMBL(object):
     """Class to facilitate ChEMBL queries.
 
-    This class is configured using environment variables:
+    This class is configured using the configuration file (see the
+    cohort_manager.config module for more information).
 
-    DB_CHEMBL_HOST: The hostname (default 'localhost').
-    DB_CHEMBL_PORT: The port (default '5432').
-    DB_CHEMBL_NAME: The database name.
-    DB_CHEMBL_USERNAME: The PostgreSQL database username.
-    DB_CHEMBL_PASSWORD: The PostgreSQL database password.
-    DB_CHEMBL_B64_PASSWORD: A base64 encoded PostgreSQL database password (for
-                            people who don't want to set passwords as
-                            environment variable in clear text).
+    host: The hostname (default 'localhost').
+    port: The port (default '5432').
+    name: The database name.
+    username: The PostgreSQL database username.
+    password: The PostgreSQL database password.
+    b64_password: A base64 encoded PostgreSQL database password (for
+                  people who don't want to set passwords in configuration
+                  files as plain text).
 
     The PostgreSQL database needed for this class to work can be downloaded
     from the ChEMBL FTP server:
 
     ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/
 
-    Choose a release and download the chembl_XX_postgresql.tar.gz file.
-    Then follow the instructions.
+    Use the PostgreSQL ChEMBL 21 release file (chembl_21_postgresql.tar.gz)
+    file and follow the instructions from the downloaded file.
 
     """
     def __init__(self):
         try:
+            conf = configuration.chembl
+
+            password = conf["password"]
+            if (not password) and conf["b64_password"]:
+                password = base64.b64decode(
+                    conf["b64_password"]
+                ).decode("utf-8")
+
             self.con = psycopg2.connect(
-                database=DB_NAME, user=DB_USERNAME, password=DB_PASSWORD,
-                host=DB_HOST, port=DB_PORT
+                database=conf["name"], user=conf["username"],
+                password=password, host=conf["host"], port=conf["port"]
             )
         except psycopg2.OperationalError:
             raise ChEMBLNotInstalled()

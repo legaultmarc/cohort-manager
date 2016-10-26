@@ -4,27 +4,13 @@ Interface to SNOMED-CT.
 
 import logging
 import base64
-import os
-
 
 import psycopg2
 
+from .config import configuration
+
 
 logger = logging.getLogger(__name__)
-
-
-DB_HOST = os.environ.get("DB_SNOMED_HOST", "localhost")
-DB_PORT = os.environ.get("DB_SNOMED_PORT", 5432)
-DB_NAME = os.environ.get("DB_SNOMED_NAME")
-DB_USERNAME = os.environ.get("DB_SNOMED_USERNAME")
-DB_PASSWORD = os.environ.get("DB_SNOMED_PASSWORD")
-if not DB_PASSWORD:
-    try:
-        DB_PASSWORD = base64.b64decode(
-            os.environ.get("DB_SNOMED_B64_PASSWORD")
-        ).decode("utf-8")
-    except TypeError:
-        pass
 
 
 SNOMED_CT_CORE = 900000000000207008
@@ -54,16 +40,24 @@ class SnomedCT(object):
 
     """
     def __init__(self):
+        cfg = configuration.snomed
+
+        password = cfg["password"]
+        if (not password) and cfg["b64_password"]:
+            password = base64.b64decode(
+                cfg["b64_password"]
+            ).decode("utf-8")
+
         try:
             self.con = psycopg2.connect(
-                database=DB_NAME, user=DB_USERNAME, password=DB_PASSWORD,
-                host=DB_HOST, port=DB_PORT
+                database=cfg["name"], user=cfg["username"], password=password,
+                host=cfg["host"], port=cfg["port"]
             )
             logger.debug(
                 "Connected to database {} (on host {}:{}) with user {}"
-                "".format(DB_NAME, DB_HOST, DB_PORT, DB_USERNAME)
+                "".format(cfg["name"], cfg["host"], cfg["port"],
+                          cfg["username"])
             )
-
         except psycopg2.OperationalError:
             raise SNOMEDCTNotInstalled()
 

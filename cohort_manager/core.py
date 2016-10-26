@@ -20,6 +20,7 @@ from six.moves import range
 from .phenotype_tree import PHENOTYPE_COLUMNS, tree_from_database
 from . import types
 from . import backend
+from .config import configuration
 from .drugs.chembl import ChEMBL
 from .drugs.atc import get_atc_code_level
 
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 DRUG_EXTRA_FIELDS = (
     "start_date", "end_date", "indication", "dose", "dose_unit"
 )
-DEFAULT_BACKEND = backend.SQLiteBackend
 
 
 class CohortDataError(Exception):
@@ -126,7 +126,9 @@ class CohortManager(object):
 
         logger.info("Database file is: {}".format(self.db_path))
 
-        self.backend = DEFAULT_BACKEND()
+        self.backend = backend.backend_from_string(
+            configuration.backend["name"]
+        )
         self.backend.connect(self.path)
         self.backend.log()
 
