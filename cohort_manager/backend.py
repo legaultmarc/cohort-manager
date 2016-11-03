@@ -13,6 +13,15 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+# Numpy to SQLite lookups.
+NP_INT_TYPES = (
+    np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32,
+    np.uint64
+)
+for _np_t in NP_INT_TYPES:
+    sqlite3.register_adapter(_np_t, int)
+
+
 class Backend(object):
     def connect(self, cohort_path):
         raise NotImplementedError()

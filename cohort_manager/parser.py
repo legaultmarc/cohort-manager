@@ -9,8 +9,7 @@ import pandas as pd
 import numpy as np
 
 from .core import CohortManager
-# from . import inference
-# from . import types
+from . import types
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +63,7 @@ def _clean_global_file(variables):
     dups = variables.duplicated(subset="database_name", keep=False)
 
     # Ignore the name conflicts in the sample IDs.
-    dups = dups ^ (variables["variable_type"] == "unique_key")
+    dups = dups & (~ (variables["variable_type"] == "unique_key"))
 
     if dups.any():
         dups_list = list(set(variables["database_name"][dups]))
@@ -179,7 +178,22 @@ def _do_import(manager, variables, data):
             description=tu.description,
         )
 
-        manager.add_data(tu.database_name, data[tu.column_name])
+        v = data[tu.column_name].values
+
+        _type = types.type_str(tu.variable_type)
+        if _type.subtype_of(types.Discrete):
+            v = _recode_discrete(v, tu.affected, tu.unaffected)
+
+        manager.add_data(tu.database_name, v)
+
+
+def _recode_discrete(v, affected, unaffected):
+    out = np.full(v.shape[0], np.nan, dtype=float)
+
+    out[v == affected] = 1
+    out[v == unaffected] = 0
+
+    return out
 
 
 def _quote_li(li):
