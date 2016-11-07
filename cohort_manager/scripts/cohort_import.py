@@ -70,13 +70,12 @@ def create_import_file(filenames, delimiter, encoding, known_missings):
 
 
 def _parse_file(f, path, delimiter, encoding, known_missings):
-    inferred_types = {}
     examples = collections.defaultdict(list)
 
     reader = csv.reader(f, delimiter=delimiter)
     names = next(reader)
 
-    # Read up to 5000 examples.
+    # Read up to 5000 non-null examples.
     i = 0
     while i < 5000:
         try:
@@ -85,49 +84,50 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
             break
 
         for j, value in enumerate(row):
-            if value in known_missings:
-                examples[names[j]].append("")
-            else:
+            if value not in known_missings:
                 examples[names[j]].append(value)
-        i += 1
-
-    # Infer types from examples.
-    for column in examples:
-        inferred_types[column] = inference.infer_type(examples[column])
+                i += 1
 
     # Type cast the dataset.
     dataset = []
-    for column in examples.keys():
+    for column in examples:
+        type_name = inference.infer_type(examples[column])
         t = None
         try:
-            t = types.type_str(inferred_types[column])
+            t = types.type_str(type_name)
         except Exception:  # Type is not supported.
             pass
 
-        code, examples[column] = inference.cast_type(examples[column], t)
-
         # Write the Excel file and ask the user for curation.
-        type_name = inferred_types[column]
         if type_name is None:
             type_name = ""
 
-        affected = unaffected = ""
-        if code is not None:
+        affected = unaffected = levels = ""
+        if t is not None and t.subtype_of(types.Discrete):
+            code, _ = inference.cast_type(examples[column], t)
             affected = code.get(1, "")
             unaffected = code.get(0, "")
+
+        elif type_name == "factor":
+            levels = json.dumps(inference.infer_levels(examples[column]))
+
+        elif type_name == "factor_coded":
+            levels = json.dumps({
+                level: level for level in set(examples[column])
+            })
 
         import_flag = type_name not in ("", "text")
 
         description = snomed = parent = ""
 
         dataset.append((column, column, path, parent, type_name, affected,
-                        unaffected, description, snomed, import_flag))
+                        unaffected, levels, description, snomed, import_flag))
 
     dataset = pd.DataFrame(
         dataset,
         columns=("column_name", "database_name", "path", "parent",
-                 "variable_type", "affected", "unaffected", "description",
-                 "snomed_ct", "import")
+                 "variable_type", "affected", "unaffected", "levels",
+                 "description", "snomed_ct", "import")
     )
 
     return dataset

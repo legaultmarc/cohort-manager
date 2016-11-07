@@ -40,11 +40,14 @@ def infer_type(li, max_size=5000, known_missings=None):
 
     Possible types are:
 
+        - factor_coded (e.g. 5 or less distinct integers)
+        - factor (e.g. 5 or less distinct strings)
         - discrete
         - year
         - unique_key
         - continuous
         - text
+        - None is returned if there are no non-missing values.
 
     .. note::
 
@@ -59,6 +62,10 @@ def infer_type(li, max_size=5000, known_missings=None):
 
     li = [i for i in li if i not in known_missings]
 
+    # No non-missing values.
+    if not li:
+        return None
+
     # We limit the size to 'max_size' for the inference.
     n = len(li)
     if n > max_size:
@@ -67,16 +74,12 @@ def infer_type(li, max_size=5000, known_missings=None):
 
     # We count both the distinct values and the occurences of every type.
     value_counts = collections.Counter(li)
-
     type_counts = collections.defaultdict(int)
 
     for value, count in value_counts.items():
         type_counts[infer_primitive_type(value)] += count
 
-    if not type_counts:
-        return None
-
-    # This is not informative.
+    # This is not informative (empty strings).
     if "null" in type_counts:
         del type_counts["null"]
 
@@ -91,6 +94,20 @@ def infer_type(li, max_size=5000, known_missings=None):
     )
     if _discrete:
         return "discrete"
+
+    _factor_coded = (
+        type_counts[0][0] in ("positive_integer", "zero") and
+        len(value_counts) <= 5
+    )
+    if _factor_coded:
+        return "factor_coded"
+
+    _factor = (
+        type_counts[0][0] == "string" and
+        len(value_counts) <= 5
+    )
+    if _factor:
+        return "factor"
 
     if type_counts[0][0] == "past_year":
         return "year"
@@ -141,11 +158,11 @@ def infer_primitive_type(value):
     the other types won't be tested.
 
     """
-    types = collections.OrderedDict()
+    types = []
 
     # The first predicate matches the empty string and corresponds to the
     # "null" inferred type.
-    types[lambda x: x == ""] = "null"
+    types.append((lambda x: x == "", "null"))
 
     int_regex = re.compile(r"^-?[0-9]+$")
 
@@ -156,21 +173,21 @@ def infer_primitive_type(value):
         except Exception:
             return False
 
-    types[_f] = "past_year"
+    types.append((_f, "past_year"))
 
     def _f(x):
         if re.match(int_regex, x.strip()):
             return int(x) > 0
         return False
 
-    types[_f] = "positive_integer"
+    types.append((_f, "positive_integer"))
 
     def _f(x):
         if re.match(int_regex, x.strip()):
             return int(x) < 0
         return False
 
-    types[_f] = "negative_integer"
+    types.append((_f, "negative_integer"))
 
     def _f(x):
         try:
@@ -179,7 +196,7 @@ def infer_primitive_type(value):
         except Exception:
             return False
 
-    types[_f] = "zero"
+    types.append((_f, "zero"))
 
     def _f(x):
         try:
@@ -188,7 +205,7 @@ def infer_primitive_type(value):
         except Exception:
             return False
 
-    types[_f] = "real"
+    types.append((_f, "real"))
 
     def _f(x):
         try:
@@ -197,9 +214,9 @@ def infer_primitive_type(value):
         except Exception:
             return False
 
-    types[_f] = "date"
+    types.append((_f, "date"))
 
-    for predicate, type_name in types.items():
+    for predicate, type_name in types:
         if predicate(value):
             return type_name
 
@@ -280,6 +297,11 @@ def _encode_discrete(values):
 
     # Unable to encode as a discrete variable.
     raise ValueError("Unable to encode values as a discrete variable.")
+
+
+def infer_levels(strings):
+    c = collections.Counter(strings)
+    return {v[0]: i for i, v in enumerate(c.most_common())}
 
 
 def build_mi_matrix(dataset, inferred_types):

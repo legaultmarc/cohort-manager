@@ -166,23 +166,40 @@ def _do_import(manager, variables, data):
         data = df.join(data)
 
     # Import individual variables.
+    code_name = None  # This will get set for factors.
     for tu in variables.itertuples():
         if tu.variable_type == "unique_key":
             continue
 
-        manager.add_phenotype(
-            name=tu.database_name,
-            snomed=tu.snomed_ct,
-            parent=tu.parent,
-            variable_type=tu.variable_type,
-            description=tu.description,
-        )
-
+        mask = ~ data[tu.column_name].isnull().values
         v = data[tu.column_name].values
 
-        _type = types.type_str(tu.variable_type)
+        if tu.variable_type == "factor_coded":
+            _type = types.Factor
+        else:
+            _type = types.type_str(tu.variable_type)
+
         if _type.subtype_of(types.Discrete):
             v = _recode_discrete(v, tu.affected, tu.unaffected)
+
+        if _type.subtype_of(types.Factor):
+            try:
+                code_name, v = _add_code_and_recode_factor(
+                    v, mask, tu.database_name, tu.variable_type, tu.levels,
+                    manager
+                )
+            except ValueError as e:
+                logger.warning("Unknown error: {}.".format(e.args[0]))
+                continue
+
+        manager.add_phenotype(
+            name=tu.database_name,
+            code_name=code_name,
+            snomed=tu.snomed_ct,
+            parent=tu.parent,
+            variable_type=_type.__name__,
+            description=tu.description,
+        )
 
         manager.add_data(tu.database_name, v)
 
@@ -194,6 +211,89 @@ def _recode_discrete(v, affected, unaffected):
     out[v == unaffected] = 0
 
     return out
+
+
+def _add_code_and_recode_factor(v, mask, name, type_name, levels, manager):
+    code = {}
+
+    # Validate the levels.
+    try:
+        levels = json.loads(levels)
+    except Exception:
+        logger.warning(
+            "Variable '{}' will not be imported because the levels field did "
+            "not contain valid JSON.".format(name)
+        )
+        raise ValueError()
+
+    # Check that all data values are represented.
+    if not _have_coherent_mapping(v[mask], levels.keys()):
+        logger.info(
+            "Some data values for '{}' have no mappings in the levels field. "
+            "Such values will be set to missing.".format(name)
+        )
+
+    if len(levels.values()) != len(set(levels.values())):
+        logger.warning(
+            "Variable '{}' will not be imported because the values in "
+            "the levels field contains duplicate values. Did you assign "
+            "labels in the configuration file?".format(name)
+        )
+        raise ValueError()
+
+    if type_name == "factor":
+        # Recode v.
+        recoded = np.full(v.shape[0], np.nan, dtype=float)
+        for s, i in levels.items():
+            try:
+                i = int(i)
+            except TypeError:
+                logger.warning(
+                    "Variable '{}' will not be imported because the levels "
+                    "field contains non-numeric code values."
+                    "".format(name)
+                )
+            recoded[v == s] = i
+            code[i] = s
+
+    elif type_name == "factor_coded":
+        for i, s in levels.items():
+            i = int(i)
+            code[i] = s
+
+        # Ignore the values which are not in the code.
+        for i in range(v.shape[0]):
+            if mask[i] and (v[i] not in code.keys()):
+                v[i] = np.nan
+
+        recoded = v  # No need to further recode.
+
+    # Check if code exists.
+    code_name = None
+    codes = manager.get_code_names()
+    for _code_name in codes:
+        db_code = dict(manager.get_code(_code_name))
+        if code == db_code:
+            # Found a valid code.
+            code_name = _code_name
+            break
+
+    # Add code.
+    if code_name is None:
+        code_name = "_{}_code".format(name)
+        manager.add_codes([(code_name, k, v) for k, v in code.items()])
+        manager.con.commit()
+
+    return code_name, recoded
+
+
+def _have_coherent_mapping(values, keys):
+    # Regular factors don't need type conversions.
+    if type(values[0]) is str:
+        return set(values) == set(keys)
+
+    # Coded factors need integer comparisons.
+    return {int(i) for i in values} == {int(i) for i in keys}
 
 
 def _quote_li(li):
