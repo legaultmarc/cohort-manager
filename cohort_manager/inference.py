@@ -60,7 +60,16 @@ def infer_type(li, max_size=5000, known_missings=None):
     else:
         known_missings = set(known_missings)
 
-    li = [i for i in li if i not in known_missings]
+    n_missings = 0
+    filtered_li = []
+    for i in li:
+        if str(i) in known_missings:
+            n_missings += 1
+        else:
+            filtered_li.append(i)
+
+    missing_rate = n_missings / len(li)
+    li = filtered_li
 
     # No non-missing values.
     if not li:
@@ -97,14 +106,16 @@ def infer_type(li, max_size=5000, known_missings=None):
 
     _factor_coded = (
         type_counts[0][0] in ("positive_integer", "zero") and
-        len(value_counts) <= 5
+        len(value_counts) <= 5 and
+        n > 10
     )
     if _factor_coded:
         return "factor_coded"
 
     _factor = (
         type_counts[0][0] == "string" and
-        len(value_counts) <= 5
+        len(value_counts) <= 5 and
+        n > 10
     )
     if _factor:
         return "factor"
@@ -116,7 +127,12 @@ def infer_type(li, max_size=5000, known_missings=None):
         return "date"
 
     # Unique values suggest that this is the sample id.
-    if len(value_counts) == n and type_counts[0][0] != "real":
+    _is_key = (
+        (missing_rate == 0) and
+        n == len(value_counts) and
+        type_counts[0][0] != "real"
+    )
+    if _is_key:
         return "unique_key"
 
     # There is at least some heterogeneity.
@@ -296,7 +312,10 @@ def _encode_discrete(values):
         )
 
     # Unable to encode as a discrete variable.
-    raise ValueError("Unable to encode values as a discrete variable.")
+    raise ValueError(
+        "Unable to encode values as a discrete variable given the following "
+        "value count: {}.".format(counter)
+    )
 
 
 def infer_levels(strings):

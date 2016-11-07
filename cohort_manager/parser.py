@@ -125,11 +125,13 @@ def _read_and_clean(filename, variables, metadata):
     data = pd.read_csv(
         filename,
         delimiter=metadata["delimiter"],
-        usecols=list(variables["column_name"])
+        usecols=list(variables["column_name"]),
+        na_values=metadata["known_missings"]
     )
 
     key_name = variables.iloc[key, :]["column_name"]
 
+    data[key_name] = data[key_name].astype(str)
     try:
         data.set_index(key_name, verify_integrity=True, inplace=True)
     except ValueError:
@@ -201,7 +203,13 @@ def _do_import(manager, variables, data):
             description=tu.description,
         )
 
-        manager.add_data(tu.database_name, v)
+        try:
+            manager.add_data(tu.database_name, v)
+        except types.InvalidValues as e:
+            manager.delete(tu.database_name, _db_only=True)
+            logger.warning(
+                "{} It was be skipped.".format(e.message)
+            )
 
 
 def _recode_discrete(v, affected, unaffected):

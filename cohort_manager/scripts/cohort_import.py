@@ -75,23 +75,22 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
     reader = csv.reader(f, delimiter=delimiter)
     names = next(reader)
 
-    # Read up to 5000 non-null examples.
+    # Read up to 7000 examples.
     i = 0
-    while i < 5000:
+    while i < 7000:
         try:
             row = next(reader)
         except StopIteration:
             break
 
         for j, value in enumerate(row):
-            if value not in known_missings:
-                examples[names[j]].append(value)
-                i += 1
+            examples[names[j]].append(value)
 
     # Type cast the dataset.
     dataset = []
     for column in examples:
-        type_name = inference.infer_type(examples[column])
+        type_name = inference.infer_type(examples[column],
+                                         known_missings=known_missings)
         t = None
         try:
             t = types.type_str(type_name)
@@ -104,9 +103,16 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
 
         affected = unaffected = levels = ""
         if t is not None and t.subtype_of(types.Discrete):
-            code, _ = inference.cast_type(examples[column], t)
-            affected = code.get(1, "")
-            unaffected = code.get(0, "")
+            try:
+                code, _ = inference.cast_type(
+                    [i for i in examples[column] if i not in known_missings],
+                    t
+                )
+                affected = code.get(1, "")
+                unaffected = code.get(0, "")
+            except ValueError:
+                # Fallback to factor coded.
+                type_name = "factor_coded"
 
         elif type_name == "factor":
             levels = json.dumps(inference.infer_levels(examples[column]))
@@ -114,6 +120,7 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
         elif type_name == "factor_coded":
             levels = json.dumps({
                 level: level for level in set(examples[column])
+                if level not in known_missings
             })
 
         import_flag = type_name not in ("", "text")
@@ -178,7 +185,7 @@ def parse_args():
 
     group.add_argument(
         "--known-missings",
-        help="Known missing values (separated by comma).",
+        help="Known missing values (separated by spaces).",
         nargs="*",
         default=["NA"]
     )
@@ -210,7 +217,7 @@ def parse_args():
 
     if args.command == "parse":
         known_missings = [""]
-        known_missings += args.known_missings
+        known_missings += [s.lstrip("\\") for s in args.known_missings]
 
         create_import_file(
             args.filenames, args.delimiter, args.encoding, known_missings,
