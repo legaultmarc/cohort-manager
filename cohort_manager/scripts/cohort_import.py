@@ -101,7 +101,8 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
         if type_name is None:
             type_name = ""
 
-        affected = unaffected = levels = ""
+        levels = ""
+        affected = unaffected = ""
         if t is not None and t.subtype_of(types.Discrete):
             try:
                 code, _ = inference.cast_type(
@@ -114,7 +115,8 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
                 # Fallback to factor coded.
                 type_name = "factor_coded"
 
-        elif type_name == "factor":
+        # Need to start another if because type_name could have changed.
+        if type_name == "factor":
             levels = json.dumps(inference.infer_levels(examples[column]))
 
         elif type_name == "factor_coded":

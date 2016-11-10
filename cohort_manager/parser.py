@@ -191,7 +191,10 @@ def _do_import(manager, variables, data):
                     manager
                 )
             except ValueError as e:
-                logger.warning("Unknown error: {}.".format(e.args[0]))
+                message = "Unknown error"
+                if len(e.args) == 1:
+                    message = "{}: {}.".format(message, e.args[0])
+                logger.warning(message)
                 continue
 
         manager.add_phenotype(
