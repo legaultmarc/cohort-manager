@@ -234,7 +234,7 @@ def _handle_command(raw_command):
     return res
 
 
-def main(headless):
+def main(headless, cohort_name):
     port = STATE.get("PREFERRED_PORT")
     if not port:
         port = 8000
@@ -244,14 +244,14 @@ def main(headless):
         CohortManagerRequestHandler
     )
 
-    if STATE["DEBUG"] or headless:
-        print("Server listening on port {}.".format(port))
-
     # Launch the server thread.
     server = threading.Thread(target=httpd.serve_forever, daemon=False)
     server.start()
 
     if headless:
+        if STATE["DEBUG"]:
+            print("Server listening on port {}.".format(port))
+
         # In headless mode, the only thing that the main thread will do is
         # to wait for interrupt.
         try:
@@ -263,20 +263,30 @@ def main(headless):
 
     else:
         try:
-            client(port)
+            client(port, cohort_name)
         except EOFError:
-            print("YO")
             httpd.shutdown()
         except KeyboardInterrupt:
-            print("Ya")
+            pass
 
         httpd.shutdown()
         server.join()
 
 
-def client(port):
+def client(port, cohort_name):
     """Built-in client for non-headless connections."""
     con = http.client.HTTPConnection("localhost", port)
+
+    if cohort_name:
+        con.request("POST", "/",
+                    "load '{}'".format(cohort_name).encode("utf-8"))
+        res = con.getresponse()
+        if res.status != 200:
+            logger.warning("Load request failed.")
+        res = json.loads(res.read().decode("utf-8"))
+
+        if not res["success"]:
+            logger.warning(res["message"])
 
     while True:
         try:
@@ -1085,6 +1095,7 @@ def _format_long_doc(f):
 
 def entry_point():
     parser = argparse.ArgumentParser()
+    parser.add_argument("cohort_name", default=None, nargs="?")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--disable-pager", action="store_false")
     parser.add_argument("--headless", action="store_true")
@@ -1099,7 +1110,7 @@ def entry_point():
     if args.script:
         return batch(args.script)
 
-    return main(headless=args.headless)
+    return main(headless=args.headless, cohort_name=args.cohort_name)
 
 
 if __name__ == "__main__":
