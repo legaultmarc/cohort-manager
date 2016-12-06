@@ -31,7 +31,7 @@ class NodeData(object):
 
 class Node(object):
     def __init__(self, data=None, parent=None, children=None):
-        self.data = data  # NodeData namedtuple.
+        self.data = data  # Instance of NodeData
         self.parent = parent  # Node
         self.children = [] if children is None else children  # list of Nodes
 
@@ -73,9 +73,11 @@ class PhenotypeTree(object):
     def _pretty_print_subtree(self, node, string, depth=0):
         """Print a node and it's children."""
         bullets = ["+", "-"]
-        name = node.data.name
-        if node.data.dummy:
-            name += "*"
+        name = "{}{} ({})".format(
+            node.data.name,
+            "*" if node.data.dummy else "",
+            node.data.variable_type
+        )
 
         if depth > 0:
             print(

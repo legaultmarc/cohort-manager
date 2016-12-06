@@ -5,6 +5,7 @@ Statistical utilities for the cohort manager.
 import collections
 
 import numpy as np
+import scipy.stats
 
 
 def median_absolute_deviation(values, q=None, return_median=False):
@@ -49,3 +50,11 @@ def find_overrepresented_outlier(v):
     # If the most common outlier is more than half the cases, we return it.
     if count >= n / 2:
         return most_common_outlier
+
+
+def inverse_normal_transformation(x, c=3/8):
+    """Transform a data vector x using the inverse normal transformation.
+
+    """
+    r = scipy.stats.rankdata(x, "average")
+    return scipy.stats.norm.ppf((r - c) / (len(x) - 2 * c + 1))

@@ -251,6 +251,13 @@ class CohortManager(object):
         self.rebuild_tree()
 
     # Add information.
+    def _variable_exists(self, name):
+        self.cur.execute(
+            "SELECT name FROM phenotypes WHERE name=?",
+            (name, )
+        )
+        return self.cur.fetchone() is not None
+
     def add_phenotype(self, **kwargs):
         """Insert a phenotype into the database.
 
@@ -266,7 +273,21 @@ class CohortManager(object):
             Check that the ``code_name`` is in the ``code`` table.
 
         """
+        # Check that it doesn't already exist.
+        name = kwargs["name"]
+        if self._variable_exists(name):
+            raise ValueError(
+                "Variable '{}' is already in the database.".format(name)
+            )
+
+        # Make the type names lowercase so that it is uniform.
+        try:
+            kwargs["variable_type"] = kwargs["variable_type"].lower()
+        except:
+            pass  # Will be handled later.
+
         self._check_phenotype_fields(kwargs.keys())
+
         values = map(kwargs.get, PHENOTYPE_COLUMNS)
 
         # Check that the type is valid.
@@ -294,6 +315,11 @@ class CohortManager(object):
             an entry is added to the dummy_phenotype table.
 
         """
+        if self._variable_exists(name):
+            raise ValueError(
+                "Variable '{}' is already in the database.".format(name)
+            )
+
         # Adding the dummy phenotype to the normal phenotype table
         self.cur.execute(
             "INSERT INTO phenotypes (name, variable_type) VALUES (?, ?)",
@@ -605,6 +631,9 @@ class CohortManager(object):
 
         If the sample is a user for a child or parent variable, it will be
         marked as a user for the provided drug.
+
+        If the sample is a user of either form of a prodrug, it will be marked
+        as a user for both.
 
         It is also possible to use filters:
             - between_dates (tuple): Only returns users between the provided

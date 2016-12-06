@@ -122,12 +122,16 @@ def _read_and_clean(filename, variables, metadata):
     key = key[0]
 
     # Read the file and set the index.
-    data = pd.read_csv(
-        filename,
-        delimiter=metadata["delimiter"],
-        usecols=list(variables["column_name"]),
-        na_values=metadata["known_missings"]
-    )
+    try:
+        data = pd.read_csv(
+            filename,
+            delimiter=metadata["delimiter"],
+            usecols=list(variables["column_name"]),
+            na_values=metadata["known_missings"]
+        )
+    except:
+        logger.critical("Could not read file '{}'.".format(filename))
+        return
 
     key_name = variables.iloc[key, :]["column_name"]
 
@@ -167,15 +171,29 @@ def _do_import(manager, variables, data):
         # Represent the data with respect to the manager's order.
         data = df.join(data)
 
+    # Get a list of variables already in the manager.
+    db_variables = set(manager.get_phenotypes_list())
+
+    # Store the hierarchy and do it as an update to avoid having to take care
+    # of the order of the inserts.
+    child_to_parent = []
+
     # Import individual variables.
-    code_name = None  # This will get set for factors.
     for tu in variables.itertuples():
+        if tu.database_name in db_variables:
+            logger.warning(
+                "Skipping variable '{}' (already in database)."
+                "".format(tu.database_name)
+            )
+            continue
+
         if tu.variable_type == "unique_key":
             continue
 
         mask = ~ data[tu.column_name].isnull().values
         v = data[tu.column_name].values
 
+        code_name = None  # This will get set for factors.
         if tu.variable_type == "factor_coded":
             _type = types.Factor
         else:
@@ -197,11 +215,13 @@ def _do_import(manager, variables, data):
                 logger.warning(message)
                 continue
 
+        if not pd.isnull(tu.parent):
+            child_to_parent.append((tu.database_name, tu.parent))
+
         manager.add_phenotype(
             name=tu.database_name,
             code_name=code_name,
             snomed=tu.snomed_ct,
-            parent=tu.parent,
             variable_type=_type.__name__,
             description=tu.description,
         )
@@ -211,8 +231,12 @@ def _do_import(manager, variables, data):
         except types.InvalidValues as e:
             manager.delete(tu.database_name, _db_only=True)
             logger.warning(
-                "{} It was be skipped.".format(e.message)
+                "{} It will be skipped.".format(e.message)
             )
+
+    for child, parent in child_to_parent:
+        manager.update_phenotype(child, parent=parent)
+        manager.commit()
 
 
 def _recode_discrete(v, affected, unaffected):

@@ -340,3 +340,36 @@ def backend_from_string(s):
 
     else:
         return choices[s]()
+
+
+def sparse_to_dense(affected_samples, samples):
+    """Convert a sparse representation to a dense vector.
+
+    :param affected_samples: A list of samples that should be set to '1' in the
+                             dense representation.
+    :type affected_samples: list
+
+    :param samples: The ordered samples list for the dense vector.
+    :type samples: list
+
+    For example, if s1 and s3 are affected and the sample order is [s1, s2, s3,
+    s4, s5]:
+
+        v = sparse_to_dense(["s1", "s3"], ["s1", "s2", "s3", "s4", "s5"])
+        # v = np.array([1, 0, 1, 0, 0])
+
+    """
+    v = np.zeros(len(samples), dtype=float)
+
+    # Build id to index dict.
+    d = {sample: idx for idx, sample in enumerate(samples)}
+
+    for sample in affected_samples:
+        if sample in d:
+            v[d[sample]] = 1
+        else:
+            logger.warning(
+                "Could not find sample '{}' in the samples list corresponding "
+                "to sparse vector.".format(sample)
+            )
+    return v

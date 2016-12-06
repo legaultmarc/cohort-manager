@@ -475,9 +475,9 @@ def summarize():
           end="")
 
     print(
-        "+===============+===========+\n"
-        "| Variable type |   Count   |\n"
-        "+---------------+-----------+",
+        "+====================+===========+\n"
+        "| Variable type      |   Count   |\n"
+        "+--------------------+-----------+",
         file=out
     )
 
@@ -490,8 +490,8 @@ def summarize():
         "GROUP BY p.variable_type"
     )
     for count, t in manager.cur:
-        print("| {:<13} | {:>9} |".format(t, count), file=out)
-    print("+---------------+-----------+\n", file=out)
+        print("| {:<18} | {:>9} |".format(t, count), file=out)
+    print("+--------------------+-----------+\n", file=out)
 
     counts = {}
     counts["entries"] = manager.cur.execute(
@@ -956,7 +956,9 @@ def virtual(name, variable_type, expression):
 
     """
     if variable_type not in ("discrete", "continuous", "factor"):
-        raise REPLException("Invalid variable type.")
+        raise REPLException(
+            "Invalid variable type ({}).".format(variable_type)
+        )
 
     manager = _get_manager()
     try:

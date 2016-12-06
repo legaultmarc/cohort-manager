@@ -25,21 +25,25 @@ from .. import parser as cm_parser
 logger = logging.getLogger(__name__)
 
 
-def create_import_file(filenames, delimiter, encoding, known_missings):
+def create_import_file(filenames, delimiter, encoding, known_missings,
+                       output_filename):
     """Parse data files and create the import file."""
+
+    if not output_filename.endswith(".xlsx"):
+        output_filename += ".xlsx"
 
     frames = []
     for fn in filenames:
         with codecs.open(fn, "r", encoding) as f:
             path = os.path.abspath(fn)
             df = _parse_file(f, path, delimiter, encoding, known_missings)
+            if df is None:
+                return
             frames.append(df)
 
     dataset = pd.concat(frames)
 
-    dataset_filename = "cohort_manager_import.xlsx"
-
-    writer = pd.ExcelWriter(dataset_filename, engine="xlsxwriter")
+    writer = pd.ExcelWriter(output_filename, engine="xlsxwriter")
     dataset.to_excel(writer, "Variables", index=False)
 
     workbook = writer.book
@@ -66,7 +70,7 @@ def create_import_file(filenames, delimiter, encoding, known_missings):
           "A sample command would be:\n\n"
           "cohort-import build --import-file '{filename}' "
           "--cohort-name MY_COHORT\n\n"
-          "".format(filename=dataset_filename))
+          "".format(filename=output_filename))
 
 
 def _parse_file(f, path, delimiter, encoding, known_missings):
@@ -74,6 +78,13 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
 
     reader = csv.reader(f, delimiter=delimiter)
     names = next(reader)
+    if len(names) == 1:
+        logger.warning(
+            "Could not parse the input file as a delimited text file. This "
+            "can happen if the wrong delimiter is used (used: '{}')."
+            "".format(delimiter)
+        )
+        return
 
     # Read up to 7000 examples.
     i = 0
@@ -192,6 +203,12 @@ def parse_args():
         default=["NA"]
     )
 
+    group.add_argument(
+        "--output-filename", "-o",
+        help="Name of the output file.",
+        default="cohort_manager_import.xlsx"
+    )
+
     # Build Parser
     build_parser = subparser.add_parser(
         "build",
@@ -223,6 +240,7 @@ def parse_args():
 
         create_import_file(
             args.filenames, args.delimiter, args.encoding, known_missings,
+            args.output_filename
         )
     elif args.command == "build":
         success = cm_parser.import_file(args.import_file, args.cohort_name)

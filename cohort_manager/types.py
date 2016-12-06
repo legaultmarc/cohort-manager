@@ -38,6 +38,7 @@ def _build_types_dict():
 
 def type_str(s):
     """Return a type class from its name."""
+    s = s.replace("_", "")
     try:
         return TYPES_DICT[s.lower()]
     except KeyError:
@@ -196,7 +197,10 @@ class Continuous(Type):
                 raise InvalidValues(message)
             logger.warning(message)  # pragma: no cover
 
-        # Outlier check.
+        # Outlier check if there are more than 25 distinct values.
+        if n_values <= 25:
+            return
+
         common_outlier = stats.find_overrepresented_outlier(values)
         if common_outlier is not None:
             block = ""
@@ -213,7 +217,7 @@ class Continuous(Type):
 class Integer(Continuous):
     @staticmethod
     def check(values, name=None):
-        super(Integer, Integer).check(values)
+        super(Integer, Integer).check(values, name)
         data = _get_numpy_float_array(values)
         data = data[~np.isnan(data)]
         if np.nansum((data * 10) % 10) != 0:
@@ -228,7 +232,7 @@ class Integer(Continuous):
 class PositiveInteger(Integer):
     @staticmethod
     def check(values, name=None):
-        super(PositiveInteger, PositiveInteger).check(values)
+        super(PositiveInteger, PositiveInteger).check(values, name)
         data = _get_numpy_float_array(values)
         if np.any(data < 0):
             examples = np.unique(data[np.where(data < 0)[0]])[:4]

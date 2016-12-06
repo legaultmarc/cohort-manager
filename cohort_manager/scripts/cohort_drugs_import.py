@@ -159,8 +159,17 @@ def build_database(args):
     curated = pd.read_excel(
         args.import_file, sheetname=None
     )
-    for sheet in curated.keys():
-        curated[sheet] = curated[sheet][["query", "molregno"]]
+    sheets = list(curated.keys())
+    for sheet in sheets:
+        try:
+            curated[sheet] = curated[sheet][["query", "molregno"]]
+        except:
+            logger.warning(
+                "Could not find columns 'query' and/or 'molregno' in sheet "
+                "'{}'.".format(sheet)
+            )
+            del curated[sheet]
+
     curated = pd.concat(curated.values())
 
     curated.dropna(how="any", inplace=True)
@@ -174,11 +183,10 @@ def build_database(args):
     for i, row in curated.iterrows():
         query_dict[row.query].append(int(row.molregno))
 
-    if not (cohort["frozen"] == "yes"):
-        # This sample order has not been set yet, so we will set so that users
-        # can use the cohort.
+    if cohort.get_samples() is None:
+        # This sample order has not been set yet.
         cohort.set_samples(
-            drugs_data.loc[:, args.sample_column].unique().astype(np.string_)
+            drugs_data.loc[:, args.sample_column].unique()
         )
 
     # Load the pharmacotherapy data.

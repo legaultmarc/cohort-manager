@@ -60,7 +60,7 @@ def setup_package():
         entry_points={
             "console_scripts": [
                 "cohort-repl=cohort_manager.scripts.cohort_repl:entry_point",
-                "drug-db-builder=cohort_manager.scripts.drug_db_builder:parse_args",
+                "cohort-drugs-import=cohort_manager.scripts.cohort_drugs_import:parse_args",
                 "cohort-import=cohort_manager.scripts.cohort_import:parse_args",
                 "cohort-sim=cohort_manager.scripts.cohort_sim:parse_args",
                 "cohort-snomed-ct=cohort_manager.scripts.cohort_snomed_ct:parse_args",

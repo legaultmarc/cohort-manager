@@ -10,6 +10,7 @@ ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_20/
 
 from __future__ import division, print_function
 
+import itertools
 import collections
 import base64
 import logging
@@ -184,14 +185,12 @@ class ChEMBL(object):
 
         """
         res = self.execute(
-            "SELECT MOLREGNO, PARENT_MOLREGNO FROM MOLECULE_HIERARCHY "
-            "WHERE MOLREGNO=%s OR PARENT_MOLREGNO=%s", (molregno, molregno)
+            "SELECT MOLREGNO, PARENT_MOLREGNO, ACTIVE_MOLREGNO "
+            "FROM MOLECULE_HIERARCHY "
+            "WHERE MOLREGNO=%s OR PARENT_MOLREGNO=%s OR ACTIVE_MOLREGNO=%s",
+            (molregno, molregno, molregno)
         )
-        out = set()
-        for molregno, parent in res:
-            out.add(molregno)
-            out.add(parent)
-        return out
+        return set(itertools.chain(*res))
 
     def get_drugs_with_atc(self, atc_code):
         """Returns a list of drugs with the provided ATC code.
