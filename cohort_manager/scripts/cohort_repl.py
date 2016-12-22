@@ -1096,6 +1096,8 @@ def _format_long_doc(f):
 
 
 def entry_point():
+    logging.basicConfig(level=logging.DEBUG)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("cohort_name", default=None, nargs="?")
     parser.add_argument("--debug", action="store_true")

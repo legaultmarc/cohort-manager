@@ -31,6 +31,7 @@ class Config(object):
             "name": "snomed",
             "host": "localhost",
             "username": "",
+            "port": "5432",
             "b64_password": "",
             "password": "",
         }

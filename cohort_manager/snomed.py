@@ -18,6 +18,9 @@ SYNONYM = 900000000000013009
 FULLY_SPECIFIED_NAME = 900000000000003001
 PREFERRED = 900000000000548007
 
+# Relationship concepts
+IS_A = 116680003
+
 # Mapping concepts
 ICD_10_MAP = 447562003
 SOURCE_PROPERLY_MAPPED = 447637006
@@ -40,7 +43,7 @@ class SnomedCT(object):
 
     """
     def __init__(self):
-        cfg = configuration.snomed
+        cfg = configuration.snomed_ct
 
         password = cfg["password"]
         if (not password) and cfg["b64_password"]:
@@ -217,6 +220,25 @@ class SnomedCT(object):
         )
         self.cur.execute(sql, (concept_id, SYNONYM))
         return [i[0] for i in self.cur]
+
+    def get_description(self, concept_id):
+        """Get information on a concept id."""
+        cols = (
+            "id", "effectivetime", "active", "moduleid", "conceptid",
+            "languagecode", "typeid", "term", "casesignificanceid"
+        )
+
+        sql = (
+            "SELECT * "
+            "FROM snomed_Ct.Description "
+            "WHERE "
+            "  conceptId=%s"
+        )
+        self.cur.execute(sql, (concept_id, ))
+        out = []
+        for tu in self.cur.fetchall():
+            out.append({k: v for k, v in zip(cols, tu)})
+        return out
 
     def get_fully_specified_name(self, concept_id):
         """Get the fully specified name for a concept_id."""

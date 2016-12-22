@@ -275,6 +275,8 @@ def create_refset_extended_map(cur):
 
 
 def parse_args():
+    logging.basicConfig(level=logging.INFO)
+
     description = (
         "Helper script to help create the SNOMED-CT PostgreSQL database from "
         "the RF2 files."

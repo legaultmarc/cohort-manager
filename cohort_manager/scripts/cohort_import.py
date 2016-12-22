@@ -154,6 +154,8 @@ def _parse_file(f, path, delimiter, encoding, known_missings):
 
 
 def parse_args():
+    logging.basicConfig(level=logging.INFO)
+
     description = (
         "Helper script to help import phenotype data into a cohort."
     )

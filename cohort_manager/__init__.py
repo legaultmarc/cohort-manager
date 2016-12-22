@@ -1,8 +1,3 @@
-import logging
-
-logging.basicConfig(level=logging.INFO)
-
-
 try:
     from .version import cohort_manager_version as __version__
 except ImportError:

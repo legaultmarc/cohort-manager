@@ -2,6 +2,7 @@
 Utility to simulate phenotype data.
 """
 
+import logging
 import datetime
 import argparse
 import random
@@ -136,6 +137,7 @@ def _simulate_year_vector(n):
 
 
 def parse_args():
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
