@@ -725,16 +725,9 @@ def scatter(y, x):
     datay, metay = _get_data_meta(y)
     datax, metax = _get_data_meta(x)
 
-    typex = types.subtype_of(metax["variable_type"])
-    typey = types.subtype_of(metay["variable_type"])
-
-    if not (typex.subtype_of(types.Continuous) and
-            typey.subtype_of(types.Continuous)):
-        raise REPLException("Can only plot scatter for continuous variables.")
-
     not_missing = ~ (np.isnan(datax) | np.isnan(datay))
 
-    plt.plot(datay[not_missing], datax[not_missing], ".", c="black", ms=2)
+    plt.plot(datax[not_missing], datay[not_missing], ".", c="black", ms=2)
     plt.xlabel(x)
     plt.ylabel(y)
     filename = "cohort_plot.png"
