@@ -188,7 +188,8 @@ class CohortManager(object):
 
         self.con.commit()
 
-    def _check_phenotype_fields(self, fields):
+    @staticmethod
+    def _check_phenotype_fields(fields):
         extra = set(fields) - set(PHENOTYPE_COLUMNS)
 
         if extra:
@@ -273,6 +274,9 @@ class CohortManager(object):
             Check that the ``code_name`` is in the ``code`` table.
 
         """
+        # Check that required fields were provided.
+        self._check_phenotype_fields(kwargs.keys())
+
         # Check that it doesn't already exist.
         name = kwargs["name"]
         if self._variable_exists(name):
@@ -285,8 +289,6 @@ class CohortManager(object):
             kwargs["variable_type"] = kwargs["variable_type"].lower()
         except:
             pass  # Will be handled later.
-
-        self._check_phenotype_fields(kwargs.keys())
 
         values = map(kwargs.get, PHENOTYPE_COLUMNS)
 
@@ -931,7 +933,7 @@ class CohortManager(object):
         )
         return set([i[0] for i in self.cur.fetchall()])
 
-    def delete(self, phenotype, _db_only=False):
+    def delete(self, phenotype, cascade=True, _db_only=False, _no_commit=False):
         """Remove a phenotype from the manager."""
         # Checking the phenotype is valid
         if not self.is_valid_phenotype(phenotype):
@@ -954,10 +956,31 @@ class CohortManager(object):
 
         # Deleting the data if the phenotype is not a dummy one
         if not (is_dummy or _db_only):
-            self.backend.delete_data(phenotype)
+            try:
+                self.backend.delete_data(phenotype)
+            except KeyError:  # Phenotype had no attached data.
+                pass
+
+        # Cascading.
+        if cascade:
+            self.cur.execute(
+                "SELECT name FROM phenotypes WHERE parent=?", (phenotype, )
+            )
+            for child in self.cur.fetchall():
+                child = child[0]
+                self.delete(child, cascade=True, _db_only=_db_only,
+                            _no_commit=True)
+
+        else:
+            # Removing parent references.
+            self.cur.execute(
+                "UPDATE phenotypes SET parent=NULL WHERE parent=?",
+                (phenotype, )
+            )
 
         # Committing
-        self.commit()
+        if not _no_commit:
+            self.commit()
 
     def rename(self, old_name, new_name):
         """Rename a variable."""

@@ -155,6 +155,87 @@ class TestManager(unittest.TestCase):
         self.assertFalse(self.manager.is_valid_phenotype("dummy1"))
         self.assertFalse(self.manager.is_dummy_phenotype("dummy1"))
 
+    def test_delete_cascade(self):
+        """Tests deleting a phenotype with children."""
+        self.manager.set_samples(list("ABCDEF"))
+        self.manager.add_phenotype(name="p", variable_type="continuous")
+        self.manager.add_phenotype(name="c1", variable_type="discrete",
+                                   parent="p")
+        self.manager.add_phenotype(name="c2", variable_type="discrete",
+                                   parent="p")
+
+        self.manager.add_data("p", range(6))
+        self.manager.add_data("c1", [1, 0, 0, 1, 1, 0])
+        self.manager.add_data("c2", [0, 1, 0, 0, 1, 0])
+
+        self.manager.delete("p")
+
+        self.assertFalse(self.manager.is_valid_phenotype("p"))
+        self.assertFalse(self.manager.is_valid_phenotype("c1"))
+        self.assertFalse(self.manager.is_valid_phenotype("c2"))
+
+    def test_delete_no_cascade(self):
+        """Tests deleting a phenotype with children without cascading."""
+        self.manager.set_samples(list("ABCDEF"))
+        self.manager.add_phenotype(name="p", variable_type="continuous")
+        self.manager.add_phenotype(name="c1", variable_type="discrete",
+                                   parent="p")
+        self.manager.add_phenotype(name="c2", variable_type="discrete",
+                                   parent="p")
+
+        self.manager.add_data("p", range(6))
+        self.manager.add_data("c1", [1, 0, 0, 1, 1, 0])
+        self.manager.add_data("c2", [0, 1, 0, 0, 1, 0])
+
+        self.manager.delete("p", cascade=False)
+
+        self.assertFalse(self.manager.is_valid_phenotype("p"))
+        self.assertTrue(self.manager.is_valid_phenotype("c1"))
+        self.assertTrue(self.manager.is_valid_phenotype("c2"))
+
+        self.assertTrue(
+            self.manager.get_phenotype("c1")["parent"] is None
+        )
+
+        self.assertTrue(
+            self.manager.get_phenotype("c2")["parent"] is None
+        )
+
+    def test_delete_dummy_cascade(self):
+        """Tests deleting a dummy parent phenotype."""
+        self.manager.set_samples("ABCEDF")
+        self.manager.add_dummy_phenotype("p")
+        self.manager.add_phenotype(name="c1", parent="p",
+                                   variable_type="continuous")
+        self.manager.add_phenotype(name="c2", parent="p",
+                                   variable_type="continuous")
+
+        self.manager.delete("p")
+        self.assertFalse(self.manager.is_valid_phenotype("p"))
+        self.assertFalse(self.manager.is_valid_phenotype("c1"))
+        self.assertFalse(self.manager.is_valid_phenotype("c2"))
+
+    def test_delete_dummy_no_cascade(self):
+        """Tests deleting a dummy parent phenotype without cascade."""
+        self.manager.set_samples("ABCEDF")
+        self.manager.add_dummy_phenotype("p")
+        self.manager.add_phenotype(name="c1", parent="p",
+                                   variable_type="continuous")
+        self.manager.add_phenotype(name="c2", parent="p",
+                                   variable_type="continuous")
+
+        self.manager.delete("p", cascade=False)
+        self.assertFalse(self.manager.is_valid_phenotype("p"))
+        self.assertTrue(self.manager.is_valid_phenotype("c1"))
+        self.assertTrue(self.manager.is_valid_phenotype("c2"))
+
+        self.assertTrue(
+            self.manager.get_phenotype("c1")["parent"] is None
+        )
+        self.assertTrue(
+            self.manager.get_phenotype("c2")["parent"] is None
+        )
+
     def test_is_valid_phenotype(self):
         """Tests if the phenotype is valid."""
         self.manager.add_phenotype(name="phenotype1",
