@@ -158,6 +158,14 @@ def _do_import(manager, variables, data):
     else:
         diff = set(data.index) - set(manager.get_samples())
 
+        # Warn if more than 50% of the samples are new because it could be
+        # due to ID mismatch.
+        if len(diff) > 0.5 * data.index.shape[0]:
+            logger.warning(
+                "More than half of the samples in the imported file were not "
+                "in the database. This could indicate ID mismatch."
+            )
+
         # Check if there are new samples.
         if len(diff) > 0:
             # Add the new samples.
