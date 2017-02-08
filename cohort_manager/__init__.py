@@ -1,3 +1,5 @@
+from .core import CohortManager
+
 try:
     from .version import cohort_manager_version as __version__
 except ImportError:

@@ -875,6 +875,13 @@ class CohortManager(object):
         # Any other variable types are returned as is.
         return data
 
+    def get_dataframe(self, phenotypes):
+        """Get multiple phenotypes as a pandas dataframe."""
+        df = pd.DataFrame(index=self.get_samples())
+        for phen in phenotypes:
+            df[phen] = self.get_data(phen)
+        return df
+
     def _check_unaffected_parent_variables(self, phenotype):
         unaffected = np.full(self.n, False, dtype=bool)
         cur = self.get_phenotype(phenotype)["parent"]
@@ -1437,6 +1444,12 @@ class _Variable(object):
                 "'mean' is only available for continuous variables."
             )
         return _Variable(np.nanmean(self.data))
+
+    def standardize(self):
+        if self._is_discrete():
+            raise TypeError(
+                "'standardize' only available for continuous variables."
+            )
 
     def _pass_filter(self, threshold, mode):
         if self._is_discrete():
