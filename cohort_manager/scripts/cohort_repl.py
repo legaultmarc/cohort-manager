@@ -34,11 +34,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from six.moves import input
-try:
-    from termcolor import colored
-    COLOR = True
-except ImportError:
-    COLOR = False
 
 from cohort_manager.core import CohortManager
 from cohort_manager.drugs.chembl import ChEMBL
@@ -54,6 +49,18 @@ logger = logging.getLogger(__name__)
 
 REGISTERED_COMMANDS = {}
 STATE = {"DEBUG": False, "PAGER": True, "PREFERRED_PORT": None}
+COLORS = {k: v for k, v in zip(("grey", "red", "green", "yellow", "blue",
+                                "magenta", "cyan", "white"), range(30, 38))}
+
+
+def colored(text, color):
+    if os.getenv("ANSI_COLORS_DISABLED") is None:
+        return (
+            "\001\033[{color}m\002{text}\001\033[0m\002"
+            "".format(color=COLORS[color], text=text)
+        )
+
+    return text
 
 
 class CohortManagerRequestHandler(http.server.BaseHTTPRequestHandler):
@@ -290,11 +297,7 @@ def client(port, cohort_name):
 
     while True:
         try:
-            if COLOR:
-                s = colored("cohort repl", "blue")
-            else:
-                s = "cohort repl"
-
+            s = colored("cohort repl", "blue")
             cmd = input("[{}]> ".format(s))
             if not cmd:
                 continue
@@ -579,8 +582,7 @@ def info(phen_or_command, drug_code=None):
 
     print("Phenotype meta data:", file=message)
     for k, v in meta.items():
-        if COLOR:
-            k = colored(k, "green")
+        k = colored(k, "green")
         print("\t{}{}".format(k.ljust(30), v), file=message)
 
     print("\nSummary statistics:", file=message)
@@ -903,6 +905,31 @@ def validate():
         "success": True,
         "message": ("Ran validation routine (warnings have been displayed if "
                     "necessary.)")
+    }
+
+
+@command(args_types=(str, ))
+def standardize(name):
+    """Create a new standardized variable."""
+    manager = _get_manager()
+    data, meta = _get_data_meta(name)
+
+    t = types.type_str(meta["variable_type"])
+    if not t.subtype_of(types.Continuous):
+        raise REPLException("Can only standardize continuous variables.")
+
+    # Create a new variable.
+    meta["name"] = "{}_standardized".format(meta["name"])
+    manager.add_phenotype(**meta)
+    manager.add_data(
+        meta["name"],
+        (data - np.nanmean(data)) / np.nanstd(data)
+    )
+
+    return {
+        "success": True,
+        "message": ("Created new standardized variable '{}'."
+                    "".format(meta["name"]))
     }
 
 
