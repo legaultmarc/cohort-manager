@@ -11,7 +11,7 @@ import pandas as pd
 
 
 class CohortManagerContainer(PhenotypesContainer):
-    def __init__(self, name, path):
+    def __init__(self, name, path=""):
         self.manager = CohortManager(name, path)
         self.samples = None
 

@@ -64,6 +64,7 @@ def setup_package():
                 "cohort-import=cohort_manager.scripts.cohort_import:parse_args",
                 "cohort-sim=cohort_manager.scripts.cohort_sim:parse_args",
                 "cohort-snomed-ct=cohort_manager.scripts.cohort_snomed_ct:parse_args",
+                "cohort-genetest=cohort_manager.scripts.cohort_genetest:parse_args",
             ],
         },
         classifiers=["Development Status :: 4 - Beta",
