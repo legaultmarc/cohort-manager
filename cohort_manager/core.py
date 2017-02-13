@@ -1438,6 +1438,13 @@ class _Variable(object):
             )
         return _Variable(np.log(self.data))
 
+    def sqrt(self):
+        if self._is_discrete():
+            raise TypeError(
+                "'sqrt' is only available for continuous variables."
+            )
+        return _Variable(np.sqrt(self.data))
+
     def mean(self):
         if self._is_discrete():
             raise TypeError(

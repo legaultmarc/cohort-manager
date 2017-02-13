@@ -3,16 +3,22 @@ Integration with the ModelSpec API from genetest to allow statistical testing.
 """
 
 import argparse
+import json
 import logging
 
+logging.basicConfig()
 logger = logging.getLogger(__name__)
 
-import genetest.genotypes
+import numpy as np
+
+from genetest.genotypes.core import Representation
+from genetest.genotypes import format_map
 from ..bindings.genetest import CohortManagerContainer
-from genetest.modelspec import parse_modelspec, ModelSpec
+from genetest.modelspec import parse_modelspec, ModelSpec, _reset
 from genetest.analysis import execute
 from genetest.subscribers import Subscriber
 
+from genetest.statistics.core import StatsError
 from genetest.statistics.models.linear import StatsLinear
 from genetest.statistics.models.logistic import StatsLogistic
 
@@ -20,8 +26,9 @@ from genetest.statistics.models.logistic import StatsLogistic
 def main(args):
     # Genotypes
     if args.genotypes_format and args.genotypes:
-        container_class = genetest.genotypes.format_map(args.genotypes_format)
-        genotypes = container_class(args.genotypes)
+        container_class = format_map[args.genotypes_format]
+        genotypes = container_class(args.genotypes,
+                                    representation=Representation.ADDITIVE)
     else:
         logger.info("Doing analysis with no genotype information.")
         genotypes = None
@@ -40,8 +47,11 @@ def main(args):
     if models is None:
         models = [args.model]
 
+    # Remove comments or blank lines.
+    models = [i for i in models if i != "" and (not i.startswith("#"))]
+
     # Create the subscriber.
-    subscriber = Print(args.output_format)
+    subscriber = Print()
 
     # Create the statistical test.
     test_kwargs = {}
@@ -58,13 +68,36 @@ def main(args):
         return lambda: tests[name](**kwargs)
 
     # Parse the model(s).
-    for model in models:
-        model = parse_modelspec(model)
+    for model_str in models:
+        subscriber.model = model_str
+        model = parse_modelspec(model_str)
         model["test"] = get_test_factory(args.test, test_kwargs)
+
+        # Conditioning aka subgroup or stratified.
+        condition = model.pop("condition")
+        subgroup = None
+        if condition is not None:
+            model["stratify_by"] = condition["name"]
+
+            if condition["value"] is not None:
+                subgroup = condition["value"]
 
         model = ModelSpec(**model)
 
-        execute(phenotypes, genotypes, model, subscribers=[subscriber])
+        try:
+            execute(phenotypes, genotypes, model, subscribers=[subscriber],
+                    subgroup=subgroup)
+        except StatsError as e:
+            logger.warning(
+                "Exception raised while fitting:\n{}\n"
+                "Exception message: {}".format(
+                    model_str, str(e)
+                )
+            )
+            if not args.log_errors:
+                raise e
+
+        _reset()
 
 
 class Tracker(object):
@@ -78,32 +111,33 @@ class Tracker(object):
         return Tracker(self.path + [k])
 
 
-class Print(Subscriber):
-    def __init__(self, fmt, sep="\t"):
-        self.fmt = eval(fmt, {}, {"res": Tracker()})
-        assert type(self.fmt) is list
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if hasattr(o, "dtype"):
+            if np.issubdtype(o.dtype, int):
+                o = o.item()
+            elif np.issubdtype(o.dtype, float):
+                o = o.item()
 
-        self.SEP = sep
+        try:
+            return super().default(o)
+        except:
+            return o
+
+
+class Print(Subscriber):
+    def __init__(self, sep="\t"):
+        super().__init__()
 
     def handle(self, results):
         results = Subscriber._apply_translation(
             self.modelspec.get_translations(),
             results
         )
+        results["MODEL"]["stratification_level"] = self.stratification_level
+        results["MODEL"]["formula"] = self.model
 
-        out = []
-        for column in self.fmt:
-            if isinstance(column, str):
-                out.append(column)
-
-            elif isinstance(column, Tracker):
-                cur = results
-                for crumb in column.path:
-                    cur = cur[crumb]
-
-                out.append(str(cur))
-
-        print(self.SEP.join(out))
+        print(json.dumps(results, cls=JSONEncoder))
 
 
 def parse_args():
@@ -117,16 +151,8 @@ def parse_args():
 
     parser.add_argument(
         "--cohort",
-        help="The cohort."
-    )
-
-    parser.add_argument(
-        "--output-format", "--f",
-        help=("The format to output the results. This string will be "
-              "evaluated in an environment with a 'res' object that can "
-              "be used as an accessor. For example, if there is a "
-              "predictor called 'x', one can use '[res['x']['p_value']]' "
-              "as a valid output format.")
+        help="The cohort.",
+        required=True
     )
 
     parser.add_argument(
@@ -151,6 +177,12 @@ def parse_args():
         help=("kwargs to pass to initialize the statistical test. The format "
               "is key=value."),
         default=""
+    )
+
+    parser.add_argument(
+        "--log-errors",
+        help="Log statistical test errors instead of raising.",
+        action="store_true"
     )
 
     main(parser.parse_args())
