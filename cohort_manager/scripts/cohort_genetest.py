@@ -59,6 +59,13 @@ def main(args):
         for k, v in test_kwargs.items():
             if v.startswith("float:"):
                 test_kwargs[k] = float(test_kwargs[k][6:])
+            elif v.startswith("bool:"):
+                if v == "bool:False":
+                    test_kwargs[k] = False
+                elif v == "bool:True":
+                    test_kwargs[k] = True
+                else:
+                    raise ValueError("Invalid bool '{}'.".format(v[5:]))
 
     def get_test_factory(name, kwargs):
         tests = {"linear": StatsLinear, "logistic": StatsLogistic}
