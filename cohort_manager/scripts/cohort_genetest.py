@@ -50,9 +50,6 @@ def main(args):
     # Remove comments or blank lines.
     models = [i for i in models if i != "" and (not i.startswith("#"))]
 
-    # Create the subscriber.
-    subscriber = Print()
-
     # Create the statistical test.
     test_kwargs = {}
     if args.test_kwargs:
@@ -69,7 +66,6 @@ def main(args):
 
     # Parse the model(s).
     for model_str in models:
-        subscriber.model = model_str
         model = parse_modelspec(model_str)
         model["test"] = get_test_factory(args.test, test_kwargs)
 
@@ -84,8 +80,8 @@ def main(args):
         model = ModelSpec(**model)
 
         try:
-            execute(phenotypes, genotypes, model, subscribers=[subscriber],
-                    subgroups=subgroups)
+            execute(phenotypes, genotypes, model,
+                    subscribers=[Print(model_str)], subgroups=subgroups)
         except StatsError as e:
             logger.warning(
                 "Exception raised while fitting:\n{}\n"
@@ -125,7 +121,8 @@ class JSONEncoder(json.JSONEncoder):
 
 
 class Print(Subscriber):
-    def __init__(self, sep="\t"):
+    def __init__(self, model_str):
+        self.model = model_str
         super().__init__()
 
     def handle(self, results):
