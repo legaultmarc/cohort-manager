@@ -74,19 +74,18 @@ def main(args):
         model["test"] = get_test_factory(args.test, test_kwargs)
 
         # Conditioning aka subgroup or stratified.
-        condition = model.pop("condition")
-        subgroup = None
-        if condition is not None:
-            model["stratify_by"] = condition["name"]
-
-            if condition["value"] is not None:
-                subgroup = condition["value"]
+        conditions = model.pop("conditions")
+        if conditions is not None:
+            model["stratify_by"] = [i["name"] for i in conditions]
+            subgroups = [i["level"] for i in conditions]
+        else:
+            subgroups = None
 
         model = ModelSpec(**model)
 
         try:
             execute(phenotypes, genotypes, model, subscribers=[subscriber],
-                    subgroup=subgroup)
+                    subgroups=subgroups)
         except StatsError as e:
             logger.warning(
                 "Exception raised while fitting:\n{}\n"
@@ -134,7 +133,7 @@ class Print(Subscriber):
             self.modelspec.get_translations(),
             results
         )
-        results["MODEL"]["stratification_level"] = self.stratification_level
+        results["MODEL"]["subset_info"] = self.subset_info
         results["MODEL"]["formula"] = self.model
 
         print(json.dumps(results, cls=JSONEncoder))
