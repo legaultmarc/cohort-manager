@@ -879,7 +879,14 @@ class CohortManager(object):
         """Get multiple phenotypes as a pandas dataframe."""
         df = pd.DataFrame(index=self.get_samples())
         for phen in phenotypes:
-            df[phen] = self.get_data(phen)
+            v = self.get_data(phen)
+            t = types.type_str(self.get_phenotype(phen)["variable_type"])
+
+            if t.subtype_of(types.Factor):
+                df[phen] = v.values
+            else:
+                df[phen] = v
+
         return df
 
     def _check_unaffected_parent_variables(self, phenotype):
