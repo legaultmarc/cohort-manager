@@ -102,17 +102,6 @@ def main(args):
         _reset()
 
 
-class Tracker(object):
-    def __init__(self, path=None):
-        if path is None:
-            self.path = []
-        else:
-            self.path = path
-
-    def __getitem__(self, k):
-        return Tracker(self.path + [k])
-
-
 class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if hasattr(o, "dtype"):

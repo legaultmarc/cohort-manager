@@ -3,6 +3,7 @@ Bindings to the genetest package used for statistical analyses.
 """
 
 from ..core import CohortManager
+from ..types import type_str, Factor
 
 from genetest.phenotypes.core import PhenotypesContainer
 
@@ -46,7 +47,13 @@ class CohortManagerContainer(PhenotypesContainer):
 
         df = pd.DataFrame(index=self.manager.get_samples())
         for var in li:
-            df[var] = self.manager.get_data(var)
+            v = self.manager.get_data(var)
+            t = type_str(self.manager.get_phenotype(var)["variable_type"])
+
+            if t.subtype_of(Factor):
+                df[var] = v.values
+            else:
+                df[var] = v
 
         # Subset if needed.
         if self.samples is not None:
