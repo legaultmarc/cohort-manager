@@ -15,7 +15,7 @@ from genetest.genotypes.core import Representation
 from genetest.genotypes import format_map
 from ..bindings.genetest import CohortManagerContainer
 from genetest.modelspec import parse_modelspec, ModelSpec, _reset
-from genetest.analysis import execute
+from genetest.analysis import execute_formula
 from genetest.subscribers import Subscriber
 
 from genetest.statistics.core import StatsError
@@ -67,28 +67,11 @@ def main(args):
                 else:
                     raise ValueError("Invalid bool '{}'.".format(v[5:]))
 
-    def get_test_factory(name, kwargs):
-        tests = {"linear": StatsLinear, "logistic": StatsLogistic}
-        return lambda: tests[name](**kwargs)
-
     # Parse the model(s).
     for model_str in models:
-        model = parse_modelspec(model_str)
-        model["test"] = get_test_factory(args.test, test_kwargs)
-
-        # Conditioning aka subgroup or stratified.
-        conditions = model.pop("conditions")
-        if conditions is not None:
-            model["stratify_by"] = [i["name"] for i in conditions]
-            subgroups = [i["level"] for i in conditions]
-        else:
-            subgroups = None
-
-        model = ModelSpec(**model)
-
         try:
-            execute(phenotypes, genotypes, model,
-                    subscribers=[Print(model_str)], subgroups=subgroups)
+            execute_formula(phenotypes, genotypes, model_str, args.test,
+                            test_kwargs, subscribers=[Print(model_str)])
         except StatsError as e:
             logger.warning(
                 "Exception raised while fitting:\n{}\n"

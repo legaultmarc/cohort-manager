@@ -229,7 +229,7 @@ def _do_import(manager, variables, data):
         manager.add_phenotype(
             name=tu.database_name,
             code_name=code_name,
-            snomed=tu.snomed_ct,
+            snomed_ct_concept=tu.snomed_ct,
             variable_type=_type.__name__,
             description=tu.description,
         )

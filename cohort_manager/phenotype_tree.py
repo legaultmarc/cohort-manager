@@ -19,7 +19,7 @@ import subprocess
 from six import StringIO as StringIO
 
 
-PHENOTYPE_COLUMNS = ("name", "snomed", "parent", "variable_type",
+PHENOTYPE_COLUMNS = ("name", "snomed_ct_concept", "parent", "variable_type",
                      "description", "code_name")
 
 

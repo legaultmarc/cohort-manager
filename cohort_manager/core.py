@@ -264,7 +264,7 @@ class CohortManager(object):
 
         Known fields are:
             - name
-            - snomed
+            - snomed_ct_concept
             - parent
             - variable_type
             - description
