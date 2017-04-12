@@ -431,13 +431,13 @@ class CohortManager(object):
                 updates.append("{}={}".format(key, int(value)))
             else:
                 # Strings.
+                value = value.replace("'", '"')
                 updates.append("{}='{}'".format(key, value))
-        updates = ",".join(updates)
+        updates = ", ".join(updates)
 
-        self.cur.execute(
-            "UPDATE phenotypes SET {} WHERE name=?".format(updates),
-            (name, )
-        )
+        sql = "UPDATE phenotypes SET {} WHERE name=?".format(updates)
+
+        self.cur.execute(sql, (name, ))
         self.commit()
 
     def add_phenotypes(self, li):
