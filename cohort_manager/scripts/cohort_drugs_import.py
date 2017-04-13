@@ -97,7 +97,7 @@ def create_curation_file(args):
                           min_score=args.similarity_score_threshold,
                           custom=custom)
 
-    command = ("drug-db-builder build "
+    command = ("cohort-drugs-import build "
                "--delim '{delim}' "
                "--sample-column '{sample_column}' "
                "--drug-column '{drug_column}' "

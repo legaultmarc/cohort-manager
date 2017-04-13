@@ -190,7 +190,7 @@ class ChEMBL(object):
             "WHERE MOLREGNO=%s OR PARENT_MOLREGNO=%s OR ACTIVE_MOLREGNO=%s",
             (molregno, molregno, molregno)
         )
-        return set(itertools.chain(*res))
+        return set((i for i in itertools.chain(*res) if i is not None))
 
     def get_drugs_with_atc(self, atc_code):
         """Returns a list of drugs with the provided ATC code.
