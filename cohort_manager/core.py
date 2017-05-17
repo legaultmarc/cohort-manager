@@ -1043,8 +1043,9 @@ class CohortManager(object):
             # Integers are converted to "objects" so that they are not
             # printed as floats in the CSV file.
             if _t.subtype_of(types.Integer) or _t.subtype_of(types.Discrete):
+                missings = df[var].isnull()
                 df[var] = df[var].fillna(0).astype(int).astype(object)
-                df.loc[df[var].isnull(), var] = ""
+                df.loc[missings, var] = ""
 
         if index:
             df.to_csv(filename, index_label="sample_id")
@@ -1294,6 +1295,7 @@ class _Variable(object):
             vals = np.where(~nans)[0]
             b = b[vals]
         else:
+            # Comparing against a constant.
             vals = np.where(~nans)[0]
 
         out = np.full(a.shape[0], np.nan)
